@@ -1,0 +1,18 @@
+{
+  "name": "thomaskien/kienzlefon-t2med",
+  "description": "Zentrale AMI/APS-Middleware mit T2med-GDT-Übergabe",
+  "type": "project",
+  "require": {
+    "php": ">=8.2",
+    "ext-json": "*",
+    "ext-openssl": "*",
+    "ext-mbstring": "*",
+    "react/http": "^1.11",
+    "react/socket": "^1.17",
+    "react/event-loop": "^1.6",
+    "react/promise": "^3.3"
+  },
+  "autoload": {"psr-4": {"Kienzlefon\\": "src/"}},
+  "scripts": {"test": "php tests/php/run.php"},
+  "config": {"sort-packages": true, "platform": {"php": "8.2.0"}}
+}

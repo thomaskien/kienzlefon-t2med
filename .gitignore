@@ -1,0 +1,26 @@
+.DS_Store
+__pycache__/
+*.pyc
+.venv/
+config.local.json
+GDT/
+*.gdt
+*.log
+.runtime/
+vendor/
+config.json
+.env
+*.pem
+*.key
+WORKER_TASK.md
+# Local prototype and practice-specific notes are retained locally only.
+/monitor/
+/web/
+/run.py
+/Anrufmonitor.command
+/tests/test_calls.py
+/tests/test_integration.py
+/docs/ASTERISK.md
+/docs/INSTALLER_APS_AMI_ZUGANG.md
+/docs/anrufmonitor-demo.jpg
+
