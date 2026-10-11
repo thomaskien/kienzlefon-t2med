@@ -251,6 +251,19 @@ function validateConfig(array $config): array
     catch (\Throwable $e) { throw new ConfigurationError($e->getMessage()); }
 }
 
+/** Check the exact bind address without contacting APS/AMI or stopping other services. */
+function checkListen(array $config): void
+{
+    $listen = $config['http']['listen'];
+    $socket = @stream_socket_server('tcp://' . $listen, $errno, $error);
+    if ($socket === false) {
+        throw new ConfigurationError("HTTP-Listenadresse {$listen} kann nicht verwendet werden: {$error} ({$errno}). "
+            . 'Bei belegtem Port einen freien Middleware-Listen-Port und die passende Middleware publicURL wählen '
+            . '(vorhandene Konfiguration: installer/install.sh --reconfigure).');
+    }
+    fclose($socket);
+}
+
 function prompt(string $label, string $default = '', bool $secret = false): string
 {
     $suffix = $default !== '' && !$secret ? " [{$default}]" : '';
@@ -336,6 +349,10 @@ function main(array $argv): int
             validateConfig(loadJsonFile($argv[2]));
             return 0;
         }
+        if ($command === 'check-listen' && isset($argv[2])) {
+            checkListen(validateConfig(loadJsonFile($argv[2])));
+            return 0;
+        }
         if ($command === 'paths' && isset($argv[2])) {
             $config = validateConfig(loadJsonFile($argv[2]));
             echo $config['gdt']['root'], "\n";
@@ -358,7 +375,7 @@ function main(array $argv): int
             @chmod($argv[2], 0600);
             return 0;
         }
-        fwrite(STDERR, "Aufruf: configure.php validate DATEI | paths DATEI | interactive AUSGABE [BESTEHEND]\n");
+        fwrite(STDERR, "Aufruf: configure.php validate DATEI | check-listen DATEI | paths DATEI | interactive AUSGABE [BESTEHEND]\n");
         return 2;
     } catch (\Throwable $e) {
         fwrite(STDERR, 'Konfigurationsfehler: ' . $e->getMessage() . "\n");

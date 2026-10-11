@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import shlex
 import socket
 import socketserver
 import ssl
@@ -139,7 +140,12 @@ class MiddlewareIntegration(unittest.TestCase):
         path.write_text(json.dumps(config))
         os.chmod(path, 0o600)
         cls.log = open(root / 'server.log', 'w+')
-        cls.process = subprocess.Popen([shutil.which('php'), str(ROOT / 'bin/server.php'), '--config=' + str(path)], cwd=ROOT, stdout=cls.log, stderr=cls.log)
+        # Exercise the installed PHP invocation, including its service-specific INI settings.
+        unit = (ROOT / 'installer/kienzlefon-t2med.service').read_text()
+        launch = shlex.split(next(line.removeprefix('ExecStart=') for line in unit.splitlines() if line.startswith('ExecStart=')))
+        launch[0] = shutil.which('php')
+        launch = [arg.replace('/opt/kienzlefon-t2med', str(ROOT)).replace('/etc/kienzlefon-t2med/config.json', str(path)) for arg in launch]
+        cls.process = subprocess.Popen(launch, cwd=ROOT, stdout=cls.log, stderr=cls.log)
         def ready():
             try:
                 with urllib.request.urlopen(cls.url + '/api/v1/bootstrap', timeout=1) as response:

@@ -19,6 +19,19 @@ Nach Bereitstellung fehlender PHP-/Composer-Pakete fragt der Installer APS-Host,
 
 Die Anwendung landet root-owned unter `/opt/kienzlefon-t2med`, die Konfiguration unter `/etc/kienzlefon-t2med/config.json` mit `root:kienzlefon-t2med` und Modus `0640`. Der unprivilegierte systemd-Dienst schreibt nur in den konfigurierten GDT-Root und sein privates Runtime-Verzeichnis. Das Konfigurationsschema entspricht [config.example.json](../config.example.json).
 
+Der Installer prüft die HTTP-Listenadresse vor den Anwendungs- und Samba-Änderungen.
+Beim Update einer laufenden Middleware erfolgt die Prüfung nach deren regulärem
+Stop. Ein fremder Dienst auf demselben Port wird nicht beendet. Bei einem Konflikt
+(beispielsweise `Address already in use` auf 8765) einen freien Port wählen und
+auch die öffentliche URL anpassen, etwa Listen-Port `8766` und
+`http://middleware.example:8766`. Bestehende Client-Installationen müssen ebenfalls
+die neue URL verwenden. Die Prüfung reserviert den Port nicht dauerhaft; ein
+späterer Konflikt wird weiterhin durch die Startdiagnose erfasst.
+
+Die systemd-Unit deaktiviert PHPs PCRE-JIT nur für diesen Dienst mit
+`-d pcre.jit=0`, damit die Regex-Verarbeitung mit `MemoryDenyWriteExecute=yes`
+ohne JIT-Speicherwarnung läuft. Die systemweite PHP-Konfiguration bleibt erhalten.
+
 ## Update und Neukonfiguration
 
 Ein erneuter normaler Lauf aktualisiert Anwendung, Abhängigkeiten und Unit idempotent. Eine vorhandene Serverkonfiguration wird validiert, aber nicht überschrieben. Für bewusste Änderungen gilt:

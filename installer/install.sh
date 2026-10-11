@@ -187,6 +187,11 @@ else
     fi
 fi
 php "$SCRIPT_DIR/configure.php" validate "$PLANNED_CONFIG"
+# A running managed instance may own this port during an update. Check again
+# after its normal update stop below; never stop a foreign listener for this test.
+if ! systemctl is-active --quiet kienzlefon-t2med.service; then
+    php "$SCRIPT_DIR/configure.php" check-listen "$PLANNED_CONFIG"
+fi
 GDT_ROOT=$(php "$SCRIPT_DIR/configure.php" paths "$PLANNED_CONFIG" | sed -n '1p')
 [ -n "$GDT_ROOT" ] || fail "GDT-Root konnte nicht ermittelt werden."
 
@@ -277,6 +282,9 @@ if [ -e "$APP_DIR" ]; then
     APP_EXISTED=1; APP_BACKUP=$WORK_DIR/app.backup
     [ -f "$APP_DIR/.kienzlefon-installed" ] || fail "Zielverzeichnis ist keine verwaltete Installation: $APP_DIR"
     if [ "$SERVICE_WAS_ACTIVE" -eq 1 ]; then SERVICE_TOUCHED=1; systemctl stop kienzlefon-t2med.service; fi
+fi
+php "$SCRIPT_DIR/configure.php" check-listen "$PLANNED_CONFIG"
+if [ "$APP_EXISTED" -eq 1 ]; then
     mv -- "$APP_DIR" "$APP_BACKUP"
     APP_TOUCHED=1
 fi
