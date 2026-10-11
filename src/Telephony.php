@@ -7,18 +7,19 @@ final class Telephony
     private array $channels = [];
     private array $waiting = [];
     private array $members = [];
+    private array $queueNames = [];
     private array $buffer = [];
     private bool $syncing = false;
     private bool $online = false;
     private bool $stale = true;
     public function __construct(private array $config) {}
-    public function disconnect(): void { $this->online = false; $this->stale = true; $this->syncing = false; $this->buffer = []; $this->channels = []; $this->waiting = []; $this->members = []; }
+    public function disconnect(): void { $this->online = false; $this->stale = true; $this->syncing = false; $this->buffer = []; $this->channels = []; $this->waiting = []; $this->members = []; $this->queueNames = []; }
     public function beginSync(): void { $this->online = true; $this->stale = true; $this->syncing = true; $this->buffer = []; }
     public function finishSync(array $channelFrames, array $queueFrames): void
     {
         if (!$this->syncing || !$this->online) return;
         $old = $this->channels;
-        $this->channels = []; $this->waiting = []; $this->members = [];
+        $this->channels = []; $this->waiting = []; $this->members = []; $this->queueNames = [];
         foreach ($channelFrames as $frame) if (($frame['Event'] ?? '') === 'CoreShowChannel') {
             $id = $frame['Uniqueid'] ?? '';
             if (!$id) continue;
@@ -79,6 +80,10 @@ final class Telephony
                 $this->channels[$dest] = array_replace($fields, $this->channels[$dest] ?? []);
             }
             if ($id && isset($this->channels[$id]) && $type === 'DialBegin') $this->channels[$id]['_dial_dest'] = $dest;
+        } elseif ($type === 'QueueParams') {
+            // QueueStatus also reports queues with no callers and no members.
+            $q = $e['Queue'] ?? '';
+            if ($q !== '') $this->queueNames[$q] = true;
         } elseif (in_array($type, ['QueueEntry','QueueCallerJoin'], true)) {
             $q = $e['Queue'] ?? ''; $channel = $e['Channel'] ?? '';
             if ($q && $channel) $this->waiting[$q][$channel] = array_replace($e, ['_since'=>$now - max(0, (int)($e['Wait'] ?? 0))]);
@@ -177,7 +182,7 @@ final class Telephony
                 }
                 $result['calls'][] = ['id'=>$callId,'direction'=>$direction,'state'=>$active ? 'connected' : ($ringing ? 'ringing' : 'dialing'), 'number'=>$number, 'extensions'=>array_map('strval', array_keys($ext)), 'channel_age_seconds'=>max(0, (int)($now - $created)), 'duration_seconds'=>$active && $connected !== null ? max(0, (int)($now - $connected)) : null, 'name_status'=>$number ? 'pending' : 'not_found', 'patients'=>[]];
             }
-            $queueNames = array_unique(array_merge($this->config['queues'], array_keys($this->waiting), array_keys($this->members)));
+            $queueNames = array_unique(array_merge($this->config['queues'], array_keys($this->queueNames), array_keys($this->waiting), array_keys($this->members)));
             foreach ($queueNames as $q) {
                 if ($this->config['queues'] && !in_array($q, $this->config['queues'], true)) continue;
                 $entries = [];

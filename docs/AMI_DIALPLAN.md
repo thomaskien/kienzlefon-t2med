@@ -102,6 +102,13 @@ Die vorhandene Route übernimmt Providerwahl, Rufberechtigungen und **Praxis-Abs
 
 ## Ereignisse und Bestandsabgleich
 
+`telephony.queues: []` zeigt alle über AMI erkannten Warteschlangen. Eine explizite
+Liste begrenzt die Anzeige auf diese Namen. Auch leere Warteschlangen ohne
+Mitglieder werden über `QueueParams` aus `QueueStatus` übernommen. Ohne
+erfolgreiche AMI-Anmeldung und abgeschlossenen Bestandsabgleich bleibt die Ansicht
+als veraltet markiert; die unabhängig funktionierende APS-Suche bestätigt keine
+AMI-Verbindung.
+
 Newchannel/Newstate/NewCallerid/NewConnectedLine/Newexten/VarSet, DialBegin/DialEnd, Hangup, BridgeEnter/Leave/Destroy, Rename, QueueCallerJoin/Leave/Abandon, AgentConnect, QueueMemberStatus/Pause/Added/Removed, UserEvent und OriginateResponse dürfen nicht herausgefiltert werden. Dazu Snapshot-Ereignisse samt ActionID und Abschlussereignissen von CoreShowChannels/QueueStatus. Snapshots laufen bei Verbindung und alle 60 Sekunden. Während des Abgleichs werden Live-Ereignisse gepuffert; die Webansicht ist bis zu dessen Abschluss als veraltet markiert.
 
 ## Quellen

@@ -33,6 +33,22 @@ test('GDT atomar, getrennte Arbeitsplätze, kein Überschreiben', function () {
 });
 test('IPv4, IPv6 und gemappte IPv4-Netze', function () { eq(HttpApi::allowedAddress('192.168.4.5',['192.168.0.0/16']),true);eq(HttpApi::allowedAddress('8.8.8.8',['192.168.0.0/16']),false);eq(HttpApi::allowedAddress('::ffff:192.168.4.5',['192.168.0.0/16']),true);eq(HttpApi::allowedAddress('::1',['::1/128']),true); });
 test('Warteschlange referenziert denselben logischen Anruf', function () { $s=new Telephony(config()['telephony']);$s->beginSync();$s->finishSync([channel('a','PJSIP/trunk-0001','a'),channel('b','PJSIP/201-0002','a')],[['Event'=>'QueueEntry','Queue'=>'praxis','Channel'=>'PJSIP/trunk-0001','Position'=>'2','Wait'=>'45']]);$v=$s->view();eq(count($v['calls']),1);eq($v['queues'][0]['entries'][0]['call_id'],$v['calls'][0]['id']);eq($v['calls'][0]['state'],'waiting');eq($v['calls'][0]['duration_seconds'],null); });
+test('Leere Warteschlange ohne Mitglieder erscheint aus QueueParams', function () {
+ $s=new Telephony(config()['telephony']);$s->beginSync();
+ $s->event(['Event'=>'QueueParams','Queue'=>'praxis','ActionID'=>'snapshot']);
+ $s->finishSync([],[['Event'=>'QueueParams','Queue'=>'praxis','Calls'=>'0','ActionID'=>'snapshot']]);
+ eq($s->view()['queues'],[['name'=>'praxis','waiting_count'=>0,'entries'=>[]]]);eq($s->view()['calls'],[]);
+});
+test('Snapshot und Verbindungsabbruch entfernen nicht mehr vorhandene Warteschlangen', function () {
+ $s=new Telephony(config()['telephony']);$s->beginSync();$s->finishSync([],[['Event'=>'QueueParams','Queue'=>'alt']]);
+ $s->beginSync();$s->finishSync([],[['Event'=>'QueueParams','Queue'=>'neu']]);eq(array_column($s->view()['queues'],'name'),['neu']);
+ $s->disconnect();eq($s->view()['queues'],[]);$s->beginSync();$s->finishSync([],[]);eq($s->view()['queues'],[]);
+});
+test('Expliziter Queue-Filter gilt auch für QueueParams', function () {
+ $c=config()['telephony'];$c['queues']=['praxis'];$s=new Telephony($c);$s->beginSync();
+ $s->finishSync([],[['Event'=>'QueueParams','Queue'=>'andere'],['Event'=>'QueueParams','Queue'=>'praxis']]);
+ eq(array_column($s->view()['queues'],'name'),['praxis']);
+});
 test('Hangup während Snapshot verhindert Wiederbelebung', function () { $s=new Telephony(config()['telephony']);$s->beginSync();$s->event(['Event'=>'Hangup','Uniqueid'=>'a','Channel'=>'PJSIP/trunk-0001']);$s->finishSync([channel('a','PJSIP/trunk-0001','a')],[]);eq(count($s->view()['calls']),0); });
 test('Stale-Zustand zeigt keine alten Gespräche', function () { $s=new Telephony(config()['telephony']);$s->beginSync();$s->finishSync([channel('a','PJSIP/trunk-0001','a')],[]);$s->disconnect();eq($s->view()['stale'],true);eq($s->view()['calls'],[]); });
 test('Unterschiedliche Brücken trotz gleichem Linkedid bleiben getrennt', function () { $s=new Telephony(config()['telephony']);$s->beginSync();$s->finishSync([channel('a','PJSIP/trunk-1','a','bridge1'),channel('b','PJSIP/201-2','a','bridge1'),channel('c','PJSIP/202-3','a','bridge2'),channel('d','PJSIP/other-4','a','bridge2')],[]);eq(count($s->view()['calls']),2); });

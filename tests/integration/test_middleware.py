@@ -81,6 +81,7 @@ class AMIHandler(socketserver.BaseRequestHandler):
                             self.server.send({'Event': 'CoreShowChannel', 'ActionID': aid, 'Uniqueid': 'gone', 'Linkedid': 'gone', 'Channel': 'PJSIP/trunk-gone', 'ChannelStateDesc': 'Ring', 'CallerIDNum': '03055503333'})
                         self.server.send({'Event': 'CoreShowChannelsComplete', 'ActionID': aid})
                     elif action['Action'] == 'QueueStatus':
+                        self.server.send({'Event': 'QueueParams', 'ActionID': aid, 'Queue': 'test-praxis', 'Calls': '0'})
                         self.server.send({'Event': 'QueueStatusComplete', 'ActionID': aid})
         except (OSError, ValueError):
             pass
@@ -305,6 +306,25 @@ class MiddlewareIntegration(unittest.TestCase):
         wait_for(lambda: phase() == 'connected')
         self.ami.send({'Event': 'Hangup', 'Uniqueid': 'provider', 'Channel': 'PJSIP/trunk-0099'})
         wait_for(lambda: phase() == 'ended')
+
+    def test_08_empty_queue_and_live_waiting_patient_candidates(self):
+        def queue_view():
+            view = self.request('/api/v1/telephony')[1]
+            queue = next(q for q in view['queues'] if q['name'] == 'test-praxis')
+            return view, queue
+        self.assertEqual(queue_view()[1], {'name': 'test-praxis', 'waiting_count': 0, 'entries': []})
+        self.ami.send({'Event': 'QueueCallerJoin', 'Queue': 'test-praxis', 'Uniqueid': 'queue-test', 'Linkedid': 'queue-test', 'Channel': 'PJSIP/trunk-queue-test', 'CallerIDNum': '03055501022', 'Position': '1'})
+        wait_for(lambda: queue_view()[1]['waiting_count'] == 1)
+        def candidates_ready():
+            view, queue = queue_view()
+            return next((c for c in view['calls'] if c['id'] == queue['entries'][0]['call_id'] and c['name_status'] == 'ambiguous'), None)
+        call = wait_for(candidates_ready)
+        self.assertEqual(call['id'], 'queue-test')
+        self.assertEqual(call['state'], 'waiting')
+        self.assertEqual([p['patient_number'] for p in call['patients']], [90001, 90002])
+        self.ami.send({'Event': 'QueueCallerLeave', 'Queue': 'test-praxis', 'Uniqueid': 'queue-test', 'Channel': 'PJSIP/trunk-queue-test'})
+        wait_for(lambda: queue_view()[1]['waiting_count'] == 0)
+        self.assertEqual(queue_view()[1]['entries'], [])
 
 
 if __name__ == '__main__':
