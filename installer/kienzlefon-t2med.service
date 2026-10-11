@@ -1,0 +1,36 @@
+[Unit]
+Description=Kienzlefon T2med middleware
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kienzlefon-t2med
+Group=kienzlefon-t2med
+WorkingDirectory=/opt/kienzlefon-t2med
+ExecStart=/usr/bin/php /opt/kienzlefon-t2med/bin/server.php --config=/etc/kienzlefon-t2med/config.json
+Restart=on-failure
+RestartSec=3s
+UMask=0007
+RuntimeDirectory=kienzlefon-t2med
+RuntimeDirectoryMode=0750
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=@@GDT_ROOT@@ /run/kienzlefon-t2med
+
+[Install]
+WantedBy=multi-user.target

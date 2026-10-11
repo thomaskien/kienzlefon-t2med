@@ -6,7 +6,7 @@
     "allowed_networks": ["127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"]
   },
   "ami": {"host": "127.0.0.1", "port": 5038, "username": "kienzlefon-middleware", "secret": "", "tls": false, "ca_file": ""},
-  "aps": {"url": "https://t2med.example:16567", "username": "", "password": "", "tls_verify": true, "ca_file": "", "timeout_seconds": 4, "cache_seconds": 120},
+  "aps": {"url": "https://t2med.example:16567", "username": "aps-user", "password": "", "tls_verify": true, "ca_file": "", "timeout_seconds": 4, "cache_seconds": 120},
   "telephony": {"queues": [], "extensions": {"201": "Empfang 1", "202": "Empfang 2"}, "country_code": "49", "originate_context": "kienzlefon-click-to-dial", "originate_timeout_ms": 20000},
   "gdt": {"root": "/srv/kienzlefon-GDT", "filename": "AUFRUFi.gdt", "sender": "AUFRUF", "receiver": "T2MED_PX"},
   "clients": {"empfang-1": {"label": "Empfang 1", "extension": "201", "directory": "empfang-1"}}

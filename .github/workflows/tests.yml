@@ -1,0 +1,27 @@
+name: Tests
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  php:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php: ['8.2', '8.4']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mbstring, openssl
+          tools: composer
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist
+      - run: find src bin installer -name '*.php' -exec php -l {} \;
+      - run: php tests/php/run.php
+      - run: php tests/installer/run.php
+      - run: python3 -m unittest discover -s tests/installer -v
+      - run: python3 -m unittest discover -s tests/clients -v
+      - run: python3 -m unittest discover -s tests/integration -v
+      - run: bash -n installer/install.sh clients/install-linux.sh clients/install-macos.sh
+      - run: bash installer/install.sh --dry-run

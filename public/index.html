@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>kienzlefon · T2med</title><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body>
+<header class="top"><a class="brand" href="/"><span class="mark">k</span><span>kienzlefon <small>T2med</small></span></a><div class="top-right"><span id="connection" class="connection">Verbinde …</span><span id="clock"></span></div></header>
+<main>
+<div id="demo" class="notice" hidden>Demo mit fiktiven Patientendaten. Aktenaufrufe und Telefonate werden nur simuliert.</div>
+<div class="heading"><div><p class="eyebrow">PRAXISTELEFONIE</p><h1>Alles im Blick.</h1><p class="subtitle">Wartende Anrufe, laufende Gespräche und die passende Patientenakte.</p></div><label class="workplace">Dieser Arbeitsplatz<select id="client"><option value="">Arbeitsplatz wählen</option></select></label></div>
+<div id="offline" class="notice warning" hidden>Telefoniedaten sind derzeit nicht aktuell. Die Rufnummernsuche bleibt verfügbar.</div>
+<section class="search-panel" aria-labelledby="search-title"><div><h2 id="search-title">Rufnummer suchen</h2><p>Patientenakte öffnen oder einen Rückruf starten.</p></div><form id="search-form"><label class="sr-only" for="number">Telefonnummer</label><input id="number" name="number" type="tel" autocomplete="off" placeholder="Telefonnummer eingeben" required><button type="submit" class="primary">Patient suchen <span aria-hidden="true">↗</span></button><button type="button" id="dial" class="secondary">Anrufen</button></form></section>
+<section id="search-results" class="panel results" hidden aria-live="polite"><div class="section-head"><h2>Suchergebnis <span id="search-number"></span></h2><button id="close-search" class="text-button">Schließen</button></div><div id="patients"></div></section>
+<div class="metrics"><div><span class="metric-number" id="waiting-count">–</span><span>In der Warteschleife</span></div><div><span class="metric-number" id="active-count">–</span><span>Im Gespräch</span></div><div><span class="metric-number" id="extension-count">–</span><span>Nebenstellen</span></div></div>
+<div class="columns"><section class="panel"><div class="section-head"><h2>Warteschleifen</h2><span class="live-label">LIVE</span></div><div id="queues" class="queue-list"><p class="empty">Anrufe werden geladen …</p></div></section><section class="panel"><div class="section-head"><h2>Gespräche</h2><span id="updated" class="muted"></span></div><div id="calls"><p class="empty">Gespräche werden geladen …</p></div></section></div>
+<section class="extensions-panel"><div class="section-head"><h2>Nebenstellen</h2><span class="muted">Status der aktuellen Telefonie</span></div><div id="extensions" class="extensions"></div></section>
+<section id="outgoing-panel" class="panel" hidden><div class="section-head"><h2>Rückrufaufträge</h2></div><div id="outgoing"></div></section>
+<footer>kienzlefon × T2med <span id="footer-client">Arbeitsplatz noch nicht zugeordnet</span></footer>
+</main><div id="toast" class="toast" role="status" hidden></div>
+<dialog id="dial-dialog"><form method="dialog"><p class="eyebrow">RÜCKRUF</p><h2 id="dial-title">Anruf starten?</h2><p id="dial-description"></p><div class="dialog-actions"><button value="cancel" class="secondary">Abbrechen</button><button value="call" class="primary">Jetzt anrufen</button></div></form></dialog>
+</body></html>
