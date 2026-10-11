@@ -55,6 +55,22 @@ EOF
 say() { printf '%s\n' "$*"; }
 fail() { printf 'Fehler: %s\n' "$*" >&2; exit 1; }
 
+start_middleware() {
+    # Collect the actual startup error while the failed unit still exists.
+    # Do not print the configuration: it contains APS/AMI credentials.
+    START_SINCE=$(date '+%Y-%m-%d %H:%M:%S')
+    if [ "$SERVICE_WAS_ACTIVE" -eq 1 ]; then START_ACTION=restart; else START_ACTION=start; fi
+    if systemctl "$START_ACTION" kienzlefon-t2med.service; then
+        sleep 1
+        if systemctl is-active --quiet kienzlefon-t2med.service; then return 0; fi
+    fi
+    printf 'Dienststart fehlgeschlagen. Diagnose vor dem Rollback:\n' >&2
+    systemctl show kienzlefon-t2med.service --no-pager \
+        --property=ActiveState,SubState,Result,ExecMainCode,ExecMainStatus >&2 || true
+    journalctl -u kienzlefon-t2med.service --since "$START_SINCE" -n 80 --no-pager -o cat >&2 || true
+    fail "Dienst ist nach Installation nicht aktiv (Startfehler siehe oben)."
+}
+
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --dry-run) DRY_RUN=1 ;;
@@ -305,9 +321,7 @@ fi
 systemctl daemon-reload
 SERVICE_TOUCHED=1
 systemctl enable kienzlefon-t2med.service
-if [ "$SERVICE_WAS_ACTIVE" -eq 1 ]; then systemctl restart kienzlefon-t2med.service; else systemctl start kienzlefon-t2med.service; fi
-sleep 1
-systemctl is-active --quiet kienzlefon-t2med.service || fail "Dienst ist nach Installation nicht aktiv."
+start_middleware
 
 SUCCESS=1
 say "Installation abgeschlossen. Konfiguration: $CONFIG_FILE"

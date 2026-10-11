@@ -77,6 +77,15 @@ Der Helper weist dabei darauf hin, dass die Serverzuordnung offline nicht geprü
 
 ## Betrieb und Diagnose
 
+Schlägt der Dienststart während der Installation fehl, zeigt der Installer vor dem
+Rollback den systemd-Status und die Journalmeldungen dieses Startversuchs an.
+Die Konfigurationsdatei mit Zugangsdaten wird dabei nicht ausgegeben. Das
+Dienstjournal kann auch nach dem Rollback gelesen werden:
+
+```sh
+journalctl -u kienzlefon-t2med.service -b -n 100 --no-pager -o cat
+```
+
 ```sh
 systemctl status kienzlefon-t2med.service
 journalctl -u kienzlefon-t2med.service
