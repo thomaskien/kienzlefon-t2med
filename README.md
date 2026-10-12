@@ -5,7 +5,7 @@
 # kienzlefon-t2med
 
 > [!WARNING]
-> **Nicht für diesen Zweck vorgesehene Schnittstelle:** Der Aktenaufruf nutzt die GDT-/Kalenderanbindung von T2med für die Telefonie-Anbindung. Diese Schnittstelle ist dafür nicht vorgesehen. T2med-Updates können das Verhalten ändern oder die Funktion unterbrechen. Den Aktenaufruf vor dem Praxiseinsatz und nach T2med-Updates am jeweiligen Arbeitsplatz prüfen.
+> **APS wird außerhalb des vorgesehenen Einsatzzwecks genutzt:** Die APS-Schnittstelle von T2med ist nicht für die hier umgesetzte Telefonie-Anbindung vorgesehen. T2med-Updates können die Patientensuche und Namensauflösung verändern oder unterbrechen. Diese Funktionen vor dem Praxiseinsatz und nach T2med-Updates prüfen. Der Hinweis betrifft ausschließlich APS; der Aktenaufruf über GDT erfolgt bestimmungsgemäß.
 
 Anrufer erkennen, Warteschlangen und Gespräche im Blick behalten und die passende Patientenakte mit einem Klick öffnen: kienzlefon-t2med verbindet Asterisk mit T2med über eine zentrale PHP-Middleware.
 
