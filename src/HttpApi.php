@@ -28,7 +28,7 @@ final class HttpApi
             if ($method === 'GET' && $path === '/api/v1/bootstrap') {
                 $clients = [];
                 foreach ($this->runtime->config['clients'] as $id => $client) $clients[] = ['id'=>(string)$id,'label'=>$client['label'],'extension'=>$client['extension']];
-                return self::json(['token'=>$this->token,'clients'=>$clients,'demo'=>$this->runtime->demo,'version'=>Version::CURRENT]);
+                return self::json(['token'=>$this->token,'clients'=>$clients,'demo'=>$this->runtime->demo,'version'=>Version::CURRENT,'author'=>Version::AUTHOR]);
             }
             if ($method === 'GET' && $path === '/api/v1/telephony') return self::json($this->runtime->view());
             if ($method === 'GET' && $path === '/healthz') return self::json(['status'=>'ok','demo'=>$this->runtime->demo,'version'=>Version::CURRENT]);
@@ -45,6 +45,11 @@ final class HttpApi
                 }
                 if ($path === '/api/v1/patient-open') return self::json($this->runtime->openPatient($input));
                 if ($path === '/api/v1/calls') return $this->runtime->originate($input)->then(static fn($call) => self::json($call, 202), self::failure(...));
+                if ($path === '/api/v1/calls/cleanup') return self::json($this->runtime->cleanupCalls($input));
+                if (preg_match('~^/api/v1/calls/([a-fA-F0-9-]{36})/(retry|dismiss)$~D', $path, $match)) {
+                    if ($match[2] === 'dismiss') return self::json($this->runtime->dismissCall($match[1], $input));
+                    return $this->runtime->retryCall($match[1], $input)->then(static fn($call) => self::json($call, 202), self::failure(...));
+                }
                 if ($path === '/api/v1/transfers') return $this->runtime->transfer($input)->then(static fn($job) => self::json($job, 202), self::failure(...));
                 if (preg_match('~^/api/v1/transfers/([a-fA-F0-9-]{36})/(cancel|complete)$~D',$path,$match)) return $this->runtime->transferControl($match[1],$match[2],$input)->then(static fn($job) => self::json($job,202),self::failure(...));
                 return self::json(['error'=>'Endpunkt nicht gefunden.'], 404);

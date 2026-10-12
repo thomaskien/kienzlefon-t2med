@@ -291,8 +291,9 @@ class MiddlewareIntegration(unittest.TestCase):
                 self.assertEqual(len(self.aps.requests), after_first)
 
     def test_02_version_is_available_without_patient_lookup(self):
-        self.assertEqual(self.request('/api/v1/bootstrap')[1]['version'], '1.3.5')
-        self.assertEqual(self.request('/healthz')[1]['version'], '1.3.5')
+        self.assertEqual(self.request('/api/v1/bootstrap')[1]['version'], '1.3.6')
+        self.assertEqual(self.request('/api/v1/bootstrap')[1]['author'], 'Dr. Thomas Kienzle')
+        self.assertEqual(self.request('/healthz')[1]['version'], '1.3.6')
 
     def test_03_http_controls_and_read_only_link(self):
         self.assertEqual(self.request('/api/v1/lookup', {'number': '03055501111'}, {'Origin': 'https://foreign.example'})[0], 403)
@@ -385,6 +386,8 @@ class MiddlewareIntegration(unittest.TestCase):
         wait_for(lambda: phase() == 'connected')
         self.ami.send({'Event': 'Hangup', 'Uniqueid': 'provider', 'Channel': 'PJSIP/trunk-0099'})
         wait_for(lambda: phase() == 'ended')
+        for uid in [source, 'local1', 'local2']:
+            self.ami.send({'Event': 'Hangup', 'Uniqueid': uid})
 
     def test_08_empty_queue_and_live_waiting_patient_candidates(self):
         def queue_view():
@@ -485,6 +488,48 @@ class MiddlewareIntegration(unittest.TestCase):
         self.ami.send({'Event': 'BridgeEnter', 'Uniqueid': source, 'BridgeUniqueid': 'cancel-original', 'ChannelStateDesc': 'Up'})
         wait_for(lambda: self.transfer_job(request['request_id'])['phase'] == 'cancelled')
         for uid in [source, peer]: self.ami.send({'Event': 'Hangup', 'Uniqueid': uid})
+
+
+    def test_13_callback_retry_dismiss_cleanup_are_scoped_and_idempotent(self):
+        def outgoing():
+            return {c['request_id']: c for c in self.request('/api/v1/telephony')[1]['outgoing']}
+
+        def start_failed(client, extension):
+            payload = {'client_id': client, 'extension': extension, 'number': '03055508888', 'request_id': str(uuid.uuid4())}
+            self.assertEqual(self.request('/api/v1/calls', payload)[0], 202)
+            self.ami.send({'Event': 'OriginateResponse', 'ActionID': 'kf-c2d-' + payload['request_id'], 'Response': 'Failure'})
+            wait_for(lambda: outgoing()[payload['request_id']]['can_cleanup'])
+            return payload
+
+        original = start_failed('empfang-1', '201')
+        foreign = start_failed('empfang-2', '202')
+        endpoint = '/api/v1/calls/' + original['request_id']
+        retry = {'client_id': 'empfang-1', 'request_id': str(uuid.uuid4()), 'number': '999', 'extension': '202'}
+        count = len([a for a in self.ami.actions if a['Action'] == 'Originate'])
+        self.assertEqual(self.request(endpoint + '/retry', retry, {'X-Kienzlefon-Token': ''})[0], 403)
+        self.assertEqual(self.request(endpoint + '/retry', {**retry, 'client_id': 'empfang-2'})[0], 400)
+        self.assertEqual(self.request(endpoint + '/dismiss', {'client_id': 'empfang-2'})[0], 400)
+        self.assertEqual(self.request(endpoint + '/retry')[0], 404)
+        status, repeated = self.request(endpoint + '/retry', retry)
+        self.assertEqual(status, 202)
+        self.assertEqual(repeated['number'], original['number'])
+        self.assertEqual(repeated['extension'], original['extension'])
+        self.assertEqual(self.request(endpoint + '/retry', retry)[1]['request_id'], retry['request_id'])
+        self.assertEqual(len([a for a in self.ami.actions if a['Action'] == 'Originate']), count + 1)
+        self.assertEqual(self.request(endpoint + '/retry', {**retry, 'request_id': str(uuid.uuid4())})[0], 503)
+        self.assertFalse(outgoing()[original['request_id']]['can_retry'])
+        active_endpoint = '/api/v1/calls/' + retry['request_id']
+        mutation_start = len(self.ami.actions)
+        self.assertEqual(self.request(active_endpoint + '/dismiss', {'client_id': 'empfang-1'})[1], {'removed': [retry['request_id']]})
+        self.assertNotIn(retry['request_id'], outgoing())
+        self.assertEqual(self.request('/api/v1/calls', {**original, 'request_id': str(uuid.uuid4())})[0], 503)
+        self.assertEqual(self.request(endpoint + '/retry', retry)[1]['request_id'], retry['request_id'])
+        cleaned = self.request('/api/v1/calls/cleanup', {'client_id': 'empfang-1'})[1]['removed']
+        self.assertIn(original['request_id'], cleaned)
+        self.assertNotIn(foreign['request_id'], cleaned)
+        self.assertIn(foreign['request_id'], outgoing())
+        self.assertFalse(any(a['Action'] in ['Originate', 'Hangup', 'Redirect'] for a in self.ami.actions[mutation_start:]))
+        self.ami.send({'Event': 'OriginateResponse', 'ActionID': 'kf-c2d-' + retry['request_id'], 'Response': 'Failure'})
 
 
 if __name__ == '__main__':

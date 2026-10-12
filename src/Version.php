@@ -4,5 +4,6 @@ namespace Kienzlefon;
 
 final class Version
 {
-    public const CURRENT = '1.3.5';
+    public const CURRENT = '1.3.6';
+    public const AUTHOR = 'Dr. Thomas Kienzle';
 }

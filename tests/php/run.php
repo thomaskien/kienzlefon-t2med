@@ -87,5 +87,6 @@ test('APS-Nummernkollision mit führender Null verlangt Auswahl', fn()=>eq(Aps::
 test('Frühe Medienbrücke zählt nicht als verbunden', function () { $s=new Telephony(config()['telephony']); $s->beginSync();$a=channel('a','PJSIP/201-1','a','b');$b=channel('b','PJSIP/trunk-2','a','b');$b['ChannelStateDesc']='Ring';$s->finishSync([$a,$b],[]);eq($s->bridged('a','b'),false);eq($s->view()['calls'][0]['state'] === 'connected',false); });
 test('Beantworteter Local-Zwischenkanal allein bedeutet kein Patientengespräch', function () { $s=new Telephony(config()['telephony']);$s->beginSync();$s->finishSync([channel('a','PJSIP/201-1','a','b1'),channel('b','Local/out@route-01;1','a','b1'),channel('c','Local/out@route-01;2','a','b2'),channel('d','PJSIP/trunk-2','a')],[]);eq($s->view()['calls'][0]['state'] === 'connected',false); });
 require __DIR__ . '/transfers.php';
+require __DIR__ . '/outgoing.php';
 \React\EventLoop\Loop::stop();
 echo "$passed bestanden, $failed fehlgeschlagen\n";exit($failed ? 1 : 0);

@@ -2,12 +2,12 @@
 
 Zentrale PHP-Middleware zwischen Asterisk und T2med: Anrufer erkennen, Warteschlangen und Gespräche im Browser anzeigen, Patientenakten über GDT öffnen und Rückrufe vom richtigen Arbeitsplatz starten.
 
-Aktuelle Version: **1.3.5** · [Änderungen](CHANGELOG.md). Die Version steht auch im
-Webmenü, unter `/healthz`, in `php bin/server.php --version` und direkt beim Start des Installers (auch bei `--dry-run` und `--help`).
+Aktuelle Version: **1.3.6** · [Änderungen](CHANGELOG.md). Die Version steht auch im
+Footer (mit Autor Dr. Thomas Kienzle), im Webmenü, unter `/healthz`, in `php bin/server.php --version` und direkt beim Start des Installers (auch bei `--dry-run` und `--help`).
 
 ## Funktionen
 
-- Kompaktansicht für den Arbeitsplatz (ca. 250 × 190 px bei einem eigenen Gespräch und zwei Wartenden), getrennte Bereiche für Gespräche und Warteschlange, aufklappbare Patientenauswahl und vollständige Übersicht.
+- Kompaktansicht für den Arbeitsplatz (ca. 250 × 210 px bei einem eigenen Gespräch und zwei Wartenden), getrennte Bereiche für Gespräche und Warteschlange, aufklappbare Patientenauswahl und vollständige Übersicht.
 - Dauerhafte AMI-Verbindung mit Wiederverbindung und Bestandsabgleich; Warteschlangen, Gespräche und Nebenstellen als Webansicht und JSON.
 - Asynchrone Patientensuche über den bestätigten APS-Suchendpunkt. Mehrere Patienten zu einer Rufnummer bleiben getrennt und werden zur Auswahl angeboten.
 - Namensauflösung für die Telefonanzeige über temporäre Kanalvariablen. Die Ein-Sekunden-Frist und die Übernahme in `CALLERID(name)` bleiben im Asterisk-Dialplan.

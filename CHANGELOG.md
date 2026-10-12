@@ -1,5 +1,12 @@
 # Änderungen
 
+## 1.3.6 – 12.10.2026
+
+- Rückrufaufträge mit „Nochmal versuchen“, „Löschen“ und „Liste bereinigen“. Löschen betrifft die Historie; laufende Gespräche und der Schutz vor doppelten Wählaufträgen bleiben erhalten. Wiederholen verwendet die ursprüngliche Rufnummer und Nebenstelle und ist nur nach abgeschlossenem Auftrag und bei freier Nebenstelle möglich.
+- Verwaiste Wählstatus werden nach einem vollständigen AMI-Bestandsabgleich abgeschlossen. Laufende und ungewisse Aufträge verlieren ihren Doppelanrufschutz nicht mehr nach zehn Minuten.
+- Footer in beiden Ansichten mit Autor „Dr. Thomas Kienzle“ und installierter Version.
+- Kein separater Vermittlungsbereich in der Kompaktansicht; aktive Rückfragen bleiben in der vollständigen Übersicht bedienbar. Rückrufknopf aus den Details laufender Anrufe entfernt.
+
 ## 1.3.5 – 12.10.2026
 
 - `tel:`-/`callto:`-Handler für Windows, macOS und Linux senden den Wählauftrag direkt an die Middleware, ohne Rückfrage, Browserfenster oder Erfolgsmeldung. Vor dem Auftrag wird die Arbeitsplatzzuordnung geprüft; Fehler bleiben sichtbar, Aufträge werden nicht automatisch wiederholt.

@@ -22,16 +22,16 @@ Schalter. Bei Verbindungsverlust werden auch hier keine alten Gespräche angezei
 
 Bei genau einem Patiententreffer steht das Geburtsdatum ungefettet direkt hinter dem Namen. Bei mehreren Treffern erscheinen die Geburtsdaten erst in der Kandidatenauswahl.
 
-Die installierte Version steht im Menü unter den Einstellungen.
+Die installierte Version und „Dr. Thomas Kienzle“ als Autor stehen im Footer beider Ansichten. Die Version steht zusätzlich im Menü unter den Einstellungen.
 
 Bei eindeutigem Treffer öffnet ein Klick auf den Patientennamen dessen Akte. Der
-kleine Abwärtspfeil klappt Rufnummer, Geburtsdatum, Patientennummer, Adresse und Rückruf
+kleine Abwärtspfeil klappt Rufnummer, Geburtsdatum, Patientennummer und Adresse
 auf. Mehrfachtreffer zeigen zunächst Rufnummer und Trefferzahl. Erst die Auswahl
 eines konkreten Patienten erzeugt die GDT-Datei. Unterdrückte/unbekannte Rufnummern
 bleiben ohne erzwungene Zuordnung sichtbar.
 
 Bei Mausbedienung passen ein eigenes Gespräch und zwei Wartende in ungefähr
-250 × 190 Pixel Inhaltsfläche einschließlich der Bereichsüberschriften. Touchgeräte erhalten größere Bedienelemente;
+250 × 210 Pixel Inhaltsfläche einschließlich der Bereichsüberschriften und des Footers. Touchgeräte erhalten größere Bedienelemente;
 Browserleisten kommen zu den Maßen hinzu. Menü, Details und lange Listen brauchen
 zusätzlichen Platz. Über das Menü kann ein eigenes Kompaktfenster geöffnet werden;
 dessen endgültige Größe und Position verwaltet der Browser. Es wird beim Polling
@@ -41,7 +41,17 @@ Im Menü: Arbeitsplatzwechsel, Rufnummernsuche, Wählen, Rückrufaufträge und d
 Einrichtung der Desktop-Telefonie-App. Die Rückrufaufträge sind die vorhandene
 flüchtige Diensthistorie, keine dauerhafte Anrufliste.
 
+Bei den Rückrufaufträgen stehen folgende Aktionen für den ausgewählten Arbeitsplatz zur Verfügung:
+
+- **Nochmal versuchen** startet mit einem bewussten Klick einen neuen Auftrag an dieselbe Nummer und Nebenstelle. Es erscheint keine zusätzliche Rückfrage. Die Aktion ist bei laufenden/ungewissen Aufträgen, belegter Nebenstelle oder veralteten Telefoniedaten gesperrt. Weitere Wiederholungen erfolgen vom neuen Eintrag aus.
+- **Löschen** entfernt den Eintrag aus der Liste, auch wenn der Anruf noch läuft. Es beendet keinen Anruf. Intern bleibt die Zuordnung für Statusverfolgung und Doppelanrufschutz erhalten.
+- **Liste bereinigen** entfernt alle erledigten Einträge dieses Arbeitsplatzes. Laufende, ungewisse und fremde Aufträge bleiben erhalten.
+
+Abgeschlossene Aufträge werden nach zehn Minuten automatisch entfernt. Ein erfolgreicher AMI-Bestandsabgleich erkennt außerdem verwaiste Aufträge, etwa nach einer ausgebliebenen Hangup-Meldung. Während der anfänglichen Rufzeit und bei veralteten Daten erfolgt kein voreiliger Abschluss. In den Details laufender Anrufe gibt es keinen Rückrufknopf mehr.
+
 ## Vermitteln
+
+Die Kompaktansicht zeigt keinen separaten Bereich „Vermittlung“. Über **Übersicht** sind Verlauf und Steuerung einer laufenden Rückfrage weiterhin erreichbar.
 
 Ein kleiner seitlicher Pfeil am eigenen verbundenen Gespräch öffnet die Vermittlung. Eine andere Nebenstelle auswählen oder eine externe Rufnummer eingeben, danach **Direkt vermitteln** oder **Rückfrage starten** wählen. Das Öffnen des Dialogs allein verändert das Gespräch nicht. Fremde Gespräche und wartende Anrufe erhalten keine Vermittlungsaktion.
 

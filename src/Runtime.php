@@ -29,6 +29,7 @@ final class Runtime
     }
     public function start(): void
     {
+        Loop::addPeriodicTimer(60, function () { if ($this->ami) $this->synchronize(); $this->collect(); });
         if (!$this->ami) return;
         $this->ami->on('connected', fn() => $this->synchronize());
         $this->ami->on('disconnected', function () {
@@ -40,15 +41,14 @@ final class Runtime
         $this->ami->on('event', function ($e) { $this->state->event($e); $this->onEvent($e); });
         $this->ami->start();
         Loop::addPeriodicTimer(1, fn() => $this->refreshLookups());
-        Loop::addPeriodicTimer(60, function () { $this->synchronize(); $this->collect(); });
     }
     public function stop(): void { $this->ami?->stop(); }
     private function synchronize(): void
     {
         if ($this->syncing || !$this->ami?->connected()) return;
-        $this->syncing = true; $this->state->beginSync();
-        all([$this->ami->action('CoreShowChannels', [], 'CoreShowChannelsComplete'), $this->ami->action('QueueStatus', [], 'QueueStatusComplete')])->then(function ($snapshots) {
-            $this->state->finishSync($snapshots[0], $snapshots[1]); $this->syncing = false; $this->transfers->event([]); $this->refreshLookups();
+        $this->syncing = true; $started = microtime(true); $this->state->beginSync();
+        all([$this->ami->action('CoreShowChannels', [], 'CoreShowChannelsComplete'), $this->ami->action('QueueStatus', [], 'QueueStatusComplete')])->then(function ($snapshots) use ($started) {
+            $this->state->finishSync($snapshots[0], $snapshots[1]); $this->syncing = false; $this->reconcileOutgoing($started); $this->transfers->event([]); $this->refreshLookups();
         }, function () { $this->syncing = false; $this->ami?->disconnect(); });
     }
     private function refreshLookups(): void
@@ -114,10 +114,10 @@ final class Runtime
             if ($this->outgoing[$id]['_signature'] !== $signature) throw new \InvalidArgumentException('Vorgangs-ID wurde bereits anders verwendet.');
             return resolve($this->publicOutgoing($this->outgoing[$id]));
         }
-        if (!$this->demo && !$this->ami?->connected()) throw new \RuntimeException('AMI ist nicht verbunden.');
-        foreach ($this->outgoing as $call) if ($call['extension'] === $client['extension'] && in_array($call['phase'], ['requested','ringing_extension','dialing_target','ringing_target','connected','unknown'], true) && $call['_expires'] > microtime(true)) throw new \RuntimeException('Für diese Nebenstelle ist bereits ein Auftrag aktiv. Bei ungewissem Ergebnis zuerst das Telefon prüfen.');
+        if (!$this->demo && (!$this->ami?->connected() || !$this->state->ready())) throw new \RuntimeException('Keine aktuellen AMI-Telefoniedaten. Bitte kurz warten.');
+        if ($this->extensionBusy($client['extension'])) throw new \RuntimeException('Für diese Nebenstelle ist bereits ein Gespräch oder Auftrag aktiv. Bei ungewissem Ergebnis zuerst das Telefon prüfen.');
         if (count($this->outgoing) >= 100) throw new \RuntimeException('Zu viele Telefonieaufträge. Bitte kurz warten.');
-        $this->outgoing[$id] = ['request_id'=>$id,'client_id'=>$clientId,'extension'=>$client['extension'],'number'=>$number,'phase'=>'requested','created_at'=>gmdate('c'),'_signature'=>$signature,'_source'=>'kf-' . $id,'_target'=>'','_legs'=>[],'_answered'=>false,'_ever_connected'=>false,'_expires'=>microtime(true) + 600];
+        $this->outgoing[$id] = ['request_id'=>$id,'client_id'=>$clientId,'extension'=>$client['extension'],'number'=>$number,'phase'=>'requested','created_at'=>gmdate('c'),'_created'=>microtime(true),'_signature'=>$signature,'_source'=>'kf-' . $id,'_target'=>'','_legs'=>[],'_answered'=>false,'_ever_connected'=>false,'_hidden'=>false,'_expires'=>microtime(true) + 600];
         if ($this->demo) { $this->outgoing[$id]['phase'] = 'demo'; return resolve($this->publicOutgoing($this->outgoing[$id])); }
         return $this->ami->action('Originate', [
             'Channel'=>'PJSIP/' . $client['extension'], 'ChannelId'=>'kf-' . $id,
@@ -168,6 +168,7 @@ final class Runtime
                 $call['phase'] = 'connected'; $call['_ever_connected'] = true;
             }
             if ($event === 'Hangup' && in_array($e['Uniqueid'] ?? '', [$call['_source'],$call['_target']], true)) $call['phase'] = $call['_ever_connected'] ? 'ended' : 'failed';
+            if (self::outgoingFinished($call)) $call['_expires'] = microtime(true) + 600;
         }
         unset($call);
     }
@@ -223,13 +224,84 @@ final class Runtime
             }
         }
         unset($call);
-        $view['outgoing'] = array_values(array_map($this->publicOutgoing(...), $this->outgoing));
+        $view['outgoing'] = array_values(array_map($this->publicOutgoing(...), array_filter($this->outgoing, fn($call) => !($call['_hidden'] ?? false))));
         $view['transfers'] = $this->transfers->view();
         return $view;
     }
     public function transfer(array $input): PromiseInterface { return $this->transfers->start($input); }
     public function transferControl(string $id, string $action, array $input): PromiseInterface { return $this->transfers->control($id,$action,$input); }
-    private function publicOutgoing(array $call): array { return array_filter($call, fn($k) => !str_starts_with($k, '_'), ARRAY_FILTER_USE_KEY); }
+    private static function outgoingFinished(array $call): bool { return in_array($call['phase'], ['ended','failed','demo'], true); }
+    private function outgoingHasChannels(array $call): bool
+    {
+        foreach (array_merge([$call['_source'], $call['_target']], $call['_legs']) as $id) if ($id !== '' && $this->state->channel($id) !== null) return true;
+        return false;
+    }
+    private function extensionBusy(string $extension): bool
+    {
+        foreach ($this->outgoing as $call) if ($call['extension'] === $extension && !self::outgoingFinished($call)) return true;
+        if (!$this->demo) foreach ($this->state->view()['calls'] as $call) if (in_array($extension, $call['extensions'], true)) return true;
+        return false;
+    }
+    private function outgoingCleanable(array $call): bool
+    {
+        return self::outgoingFinished($call) && ($this->demo || ($this->state->ready() && !$this->outgoingHasChannels($call)));
+    }
+    private function publicOutgoing(array $call): array
+    {
+        $result = array_filter($call, fn($k) => !str_starts_with($k, '_'), ARRAY_FILTER_USE_KEY);
+        $result['can_delete'] = !($call['_hidden'] ?? false);
+        $result['can_cleanup'] = $result['can_delete'] && $this->outgoingCleanable($call);
+        $result['can_retry'] = $result['can_cleanup'] && !isset($call['_retry_id']) && ($this->demo || $this->ami?->connected()) && !$this->extensionBusy($call['extension']);
+        if (isset($call['_retry_id'])) $result['retried_as'] = $call['_retry_id'];
+        return $result;
+    }
+    public function dismissCall(string $id, array $input): array
+    {
+        $id = self::requestId($id); $clientId = $input['client_id'] ?? ''; $this->client($clientId);
+        if (!isset($this->outgoing[$id])) return ['removed'=>[$id]];
+        if ($this->outgoing[$id]['client_id'] !== $clientId) throw new \InvalidArgumentException('Auftrag gehört zu einem anderen Arbeitsplatz.');
+        // Only hide history. Preserve AMI tracking, active-call guards and deduplication.
+        $this->outgoing[$id]['_hidden'] = true;
+        return ['removed'=>[$id]];
+    }
+    public function cleanupCalls(array $input): array
+    {
+        $clientId = $input['client_id'] ?? ''; $this->client($clientId); $removed = [];
+        foreach ($this->outgoing as $id => &$call) {
+            if ($call['client_id'] !== $clientId || ($call['_hidden'] ?? false) || !$this->outgoingCleanable($call)) continue;
+            $call['_hidden'] = true; $removed[] = $id;
+        }
+        unset($call);
+        return ['removed'=>$removed];
+    }
+    public function retryCall(string $id, array $input): PromiseInterface
+    {
+        $id = self::requestId($id); $request = self::requestId($input['request_id'] ?? '');
+        $clientId = $input['client_id'] ?? ''; $this->client($clientId);
+        $call = $this->outgoing[$id] ?? null;
+        if (!$call || $call['client_id'] !== $clientId) throw new \InvalidArgumentException('Rückrufauftrag für diesen Arbeitsplatz nicht gefunden.');
+        if (isset($call['_retry_id'])) {
+            if ($call['_retry_id'] === $request && isset($this->outgoing[$request])) return resolve($this->publicOutgoing($this->outgoing[$request]));
+            throw new \RuntimeException('Dieser Auftrag wurde bereits erneut versucht. Bitte den neuen Eintrag verwenden.');
+        }
+        if (isset($this->outgoing[$request])) throw new \InvalidArgumentException('Vorgangs-ID wurde bereits anders verwendet.');
+        if (!$this->publicOutgoing($call)['can_retry']) throw new \RuntimeException('Erneuter Versuch derzeit nicht möglich. Bitte Gesprächsstatus und Nebenstelle prüfen.');
+        $result = $this->originate(['client_id'=>$clientId,'extension'=>$call['extension'],'number'=>$call['number'],'request_id'=>$request]);
+        $this->outgoing[$id]['_retry_id'] = $request;
+        return $result;
+    }
+    private function reconcileOutgoing(float $snapshotStarted): void
+    {
+        if (!$this->state->ready()) return;
+        foreach ($this->outgoing as &$call) {
+            if (self::outgoingFinished($call) || $this->outgoingHasChannels($call)) continue;
+            // A snapshot during an outstanding Originate cannot prove that no channel will appear.
+            if ($call['_created'] + $this->config['telephony']['originate_timeout_ms'] / 1000 + 5 > $snapshotStarted) continue;
+            $call['phase'] = $call['_ever_connected'] ? 'ended' : 'failed';
+            $call['_expires'] = microtime(true) + 600;
+        }
+        unset($call);
+    }
     private function client(mixed $id): array
     {
         if (!is_string($id) || !isset($this->config['clients'][$id])) throw new \InvalidArgumentException('Bitte einen registrierten Arbeitsplatz wählen.');
@@ -246,7 +318,7 @@ final class Runtime
         foreach ($this->lookups as $id => $entry) if ($entry['expires'] <= $now) unset($this->lookups[$id]);
         foreach ($this->phoneLookups as $phone => $id) if (!isset($this->lookups[$id])) unset($this->phoneLookups[$phone]);
         foreach ($this->gdtRequests as $id => $entry) if ($entry['expires'] <= $now) unset($this->gdtRequests[$id]);
-        foreach ($this->outgoing as $id => $entry) if ($entry['_expires'] <= $now && in_array($entry['phase'], ['ended','failed','unknown','demo','ringing_extension','requested'], true)) unset($this->outgoing[$id]);
+        foreach ($this->outgoing as $id => $entry) if ($entry['_expires'] <= $now && self::outgoingFinished($entry)) unset($this->outgoing[$id]);
     }
     private function demoLookup(string $number): array
     {

@@ -11,12 +11,11 @@
     <div id="compact-own" aria-label="Eigene Gespräche"></div>
     <div id="compact-conversations" aria-label="Weitere laufende Gespräche" hidden><div id="compact-all-calls"></div></div>
   </section>
-  <section id="compact-transfers" class="transfer-panel" aria-labelledby="compact-transfers-title" hidden><h2 id="compact-transfers-title" class="compact-section-title">Vermittlung</h2><div id="compact-transfer-jobs"></div></section>
   <section id="compact-queue" aria-labelledby="compact-queue-title">
     <h2 id="compact-queue-title" class="compact-section-title">Warteschlange</h2>
     <div id="compact-waiting" aria-label="Wartende Anrufe"><p class="compact-empty">Anrufe werden geladen …</p></div>
   </section>
-  <footer class="compact-foot"><button id="conversations-toggle" data-action="conversations" aria-expanded="false" aria-controls="compact-conversations">Alle Gespräche ▾</button><button id="more-toggle" data-action="more" aria-expanded="false" aria-controls="compact-more">Nebenstellen</button><button data-action="full">Übersicht ↗</button></footer>
+  <footer class="compact-footer"><div class="compact-foot"><button id="conversations-toggle" data-action="conversations" aria-expanded="false" aria-controls="compact-conversations">Alle Gespräche ▾</button><button id="more-toggle" data-action="more" aria-expanded="false" aria-controls="compact-more">Nebenstellen</button><button data-action="full">Übersicht ↗</button></div><div class="compact-credit"><span id="compact-footer-version">v…</span> · von <span id="compact-footer-author">…</span></div></footer>
   <div id="compact-more" hidden><div id="compact-extensions"></div></div>
 </section>
 <div class="full-only heading"><div><p class="eyebrow">PRAXISTELEFONIE</p><h1>Telefonieübersicht</h1></div></div>
@@ -28,14 +27,14 @@
   <div class="tools-links"><button class="text-button" data-action="popup">Eigenes Kompaktfenster ↗</button><button class="text-button" data-action="setup" aria-controls="client-setup" aria-expanded="false">Telefonie-App einrichten</button></div>
   <p id="app-version" class="muted" hidden></p>
   <section id="client-setup" class="setup-panel" hidden><h2>Telefonie-App einrichten</h2><p>Verknüpft <code>tel:</code> und <code>callto:</code> mit diesem Arbeitsplatz. Python 3.9 oder neuer wird benötigt.</p><p id="setup-workplace"></p><p><a href="https://github.com/thomaskien/kienzlefon-t2med/archive/refs/heads/main.zip" target="_blank" rel="noopener noreferrer">Installationsdateien herunterladen</a></p><p>ZIP entpacken und im Projektordner den passenden Befehl ausführen:</p><label for="setup-os">Betriebssystem</label><select id="setup-os"><option value="windows">Windows · PowerShell</option><option value="macos">macOS · Terminal</option><option value="linux">Linux · Terminal</option></select><pre id="setup-command"></pre><p id="setup-hint"></p><a href="https://github.com/thomaskien/kienzlefon-t2med/blob/main/docs/CLIENTS.md" target="_blank" rel="noopener noreferrer">Anleitung und Standard-App-Auswahl ↗</a></section>
-  <section id="outgoing-panel" class="panel" hidden><div class="section-head"><h2>Rückrufaufträge</h2></div><div id="outgoing"></div></section>
+  <section id="outgoing-panel" class="panel" hidden><div class="section-head"><h2>Rückrufaufträge</h2><button id="outgoing-cleanup" class="text-button" data-action="outgoing-cleanup" type="button" title="Entfernt erledigte Rückrufaufträge dieses Arbeitsplatzes">Liste bereinigen</button></div><div id="outgoing"></div></section>
 </section>
 <section id="search-results" class="panel results" hidden aria-live="polite"><div class="section-head"><h2>Suchergebnis <span id="search-number"></span></h2><button id="close-search" class="text-button">Schließen</button></div><div id="patients"></div></section>
 <div class="full-only"><div class="metrics"><div><span class="metric-number" id="waiting-count">–</span><span>In der Warteschleife</span></div><div><span class="metric-number" id="active-count">–</span><span>Im Gespräch</span></div><div><span class="metric-number" id="extension-count">–</span><span>Nebenstellen</span></div></div>
 <section id="transfer-panel" class="panel transfer-panel" aria-labelledby="transfer-panel-title" hidden><div class="section-head"><h2 id="transfer-panel-title">Aktuelle Vermittlungen</h2></div><div id="transfer-jobs"></div></section>
 <div class="columns"><section class="panel"><div class="section-head"><h2>Warteschleifen</h2><span class="live-label">LIVE</span></div><div id="queues" class="queue-list"></div></section><section class="panel"><div class="section-head"><h2>Gespräche</h2><span id="updated" class="muted"></span></div><div id="calls"></div></section></div>
 <section class="extensions-panel"><div class="section-head"><h2>Nebenstellen</h2><span class="muted">Status der aktuellen Telefonie</span></div><div id="extensions" class="extensions"></div></section>
-<footer>kienzlefon × T2med <span id="footer-client">Arbeitsplatz noch nicht zugeordnet</span></footer></div>
+<footer class="full-footer"><span>kienzlefon × T2med</span><span><span id="footer-version">v…</span> · von <span id="footer-author">…</span></span><span id="footer-client">Arbeitsplatz noch nicht zugeordnet</span></footer></div>
 </main><div id="toast" class="toast" role="status" hidden></div>
 <dialog id="dial-dialog" aria-labelledby="dial-title"><form method="dialog"><p class="eyebrow">RÜCKRUF</p><h2 id="dial-title">Anruf starten?</h2><p id="dial-description"></p><div class="dialog-actions"><button value="cancel" class="secondary">Abbrechen</button><button value="call" class="primary">Jetzt anrufen</button></div></form></dialog>
 <dialog id="transfer-dialog" aria-labelledby="transfer-title"><form id="transfer-form">
@@ -43,7 +42,7 @@
   <fieldset class="transfer-targets"><legend class="sr-only">Zielart</legend><label><input type="radio" name="target_type" value="internal" checked> Nebenstelle</label><label><input type="radio" name="target_type" value="external"> Externe Rufnummer</label></fieldset>
   <label id="transfer-internal-label" class="transfer-field">Nebenstelle<select id="transfer-extension" required></select></label>
   <label id="transfer-external-label" class="transfer-field" hidden>Externe Rufnummer<input id="transfer-number" type="tel" autocomplete="off" placeholder="Rufnummer"></label>
-  <p class="transfer-help">Direkt übergibt das Gespräch sofort. Bei Rückfrage sprechen Sie zuerst selbst mit dem Ziel.</p><p id="transfer-error" class="transfer-error" role="alert" hidden></p>
+  <p class="transfer-help">Direkt übergibt das Gespräch sofort. Bei Rückfrage sprechen Sie zuerst selbst mit dem Ziel. Die Rückfrage steuern Sie anschließend in der vollständigen Übersicht.</p><p id="transfer-error" class="transfer-error" role="alert" hidden></p>
   <div class="dialog-actions"><button type="button" data-action="transfer-close" class="secondary">Schließen</button><button type="button" data-action="transfer-start" data-mode="blind" class="secondary">Direkt vermitteln</button><button type="button" data-action="transfer-start" data-mode="attended" class="primary">Rückfrage starten</button></div>
 </form></dialog>
 </body></html>

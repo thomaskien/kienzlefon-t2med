@@ -2,6 +2,8 @@
 
 ## Automatisierte Prüfung
 
+Version 1.3.6 lokal geprüft: 56 PHP-Tests, 15 Integrationstests mit simuliertem AMI/APS und 25 Browser-Szenarien. Neue Fälle prüfen Wiederwahl mit derselben Nummer/Nebenstelle, Deduplizierung, Arbeitsplatzbindung, Ausblenden ohne Hangup, Bereinigen nur erledigter Einträge, Bestandsabgleich verwaister Aufträge sowie den Schutz aktiver Aufträge über zehn Minuten hinaus. Im Browser geprüft: Doppelklick, manuelle Wiederholung mit derselben UUID nach Fehler, Arbeitsplatzwechsel, veraltete Snapshots, Autor/Version in beiden Footern, keine Vermittlungsanzeige in kompakt und kein Rückrufknopf an laufenden Gesprächen. Die Kompaktansicht wurde bei 250 × 210 Pixeln visuell kontrolliert. Keine echten Telefonate oder Praxisdaten verwendet.
+
 Voraussetzungen: PHP 8.2+, Composer-Abhängigkeiten, Python 3.9+ und das OpenSSL-Kommando für das kurzlebige HTTPS-Testzertifikat.
 
 ```sh

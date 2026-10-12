@@ -96,3 +96,19 @@ button:disabled{cursor:default}
 @media(max-width:720px){.transfer-job{align-items:stretch;flex-direction:column}.transfer-actions{justify-content:flex-start}}
 
 @media(pointer:coarse){.compact-row.with-transfer{grid-template-columns:20px minmax(0,1fr) auto 40px 40px}}
+
+/* Callback history actions and release credits. */
+.full-footer{flex-wrap:wrap}
+.compact-footer{display:block;justify-content:initial;margin:0;padding:0;border-top:1px solid var(--line);color:#637369;background:#f1f4ed;font-size:inherit}
+.compact-foot{margin:0;padding:0 5px;border:0;min-height:26px;display:flex;justify-content:space-between;gap:4px;background:#f1f4ed}
+.compact-credit{border-top:1px solid #e2e8df;padding:2px 5px;text-align:center;font-size:9px;line-height:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.outgoing-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 18px;border-bottom:1px solid #edf0eb;font-size:13px}
+.outgoing-row:last-child{border-bottom:0}
+.outgoing-summary{display:flex;flex-direction:column;gap:4px;min-width:0;overflow-wrap:anywhere}
+.outgoing-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}
+.outgoing-actions .secondary{padding:7px 10px;font-size:11px}
+.outgoing-actions .text-button{padding:7px;font-size:11px}
+.compact-view .outgoing-row{padding:7px 8px;font-size:11px;align-items:flex-start;flex-direction:column;gap:5px}
+.compact-view .outgoing-actions{width:100%;justify-content:flex-start;gap:4px}
+.compact-view .outgoing-actions .secondary,.compact-view .outgoing-actions .text-button{padding:5px 7px;font-size:10px;min-height:27px}
+@media(max-width:720px){.full-footer{gap:15px;line-height:1.5}}
