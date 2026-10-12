@@ -80,7 +80,7 @@ Priority: 1
 Async: true
 EarlyMedia: false
 Timeout: 20000
-CallerID: Rueckruf <Zielnummer>
+CallerID: 03055501111 <03055501111>
 Variable: __KF_C2D_ID=<UUID>
 Variable: __KF_C2D_CLIENT=<Client-ID>
 Variable: __KF_C2D_EXTENSION=<Nebenstelle>
@@ -96,7 +96,7 @@ Phase: dialing_target
 SourceUniqueid: <UNIQUEID>
 ```
 
-Die vorhandene Route übernimmt Providerwahl, Rufberechtigungen und **Praxis-Absenderrufnummer**. Das Originate-`CallerID` dient der Anzeige an der Mitarbeiter-Nebenstelle; es darf nicht ungeprüft als Absenderrufnummer zum Provider gelangen. Berechtigungen anhand `KF_C2D_EXTENSION` prüfen. Den Sonderkontext nicht pauschal für externe eingehende Anrufe freigeben.
+Die vorhandene Route übernimmt Providerwahl, Rufberechtigungen und **Praxis-Absenderrufnummer**. Seit 1.3.2 enthält Originate-`CallerID` die Zielnummer sowohl als Anzeigename als auch als Nummer, zum Beispiel `03055501111 <03055501111>`. Keine Vorgangsbezeichnungen wie „Rueckruf“ als Namen zur Zielnummer senden. Das Originate-`CallerID` dient der Anzeige an der Mitarbeiter-Nebenstelle; es darf nicht ungeprüft als Absenderrufnummer zum Provider gelangen. Berechtigungen anhand `KF_C2D_EXTENSION` prüfen. Den Sonderkontext nicht pauschal für externe eingehende Anrufe freigeben.
 
 `OriginateResponse: Success` ist nur die Annahme der ersten Rufphase. Die Middleware meldet erst `connected`, wenn der zweite Rufabschnitt und eine Brücke mit beantworteten Kanälen nachgewiesen sind. Eine AMI-Unterbrechung kann das Ergebnis ungewiss machen; kein automatischer Originate-Retry.
 

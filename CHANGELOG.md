@@ -1,5 +1,9 @@
 # Änderungen
 
+## 1.3.2 – 12.10.2026
+
+- Click-to-Dial sendet die Zielrufnummer als Anzeigenamen an die Nebenstelle. Der feste Name „Rueckruf“ wird nicht mehr übertragen, damit er nicht als Name zur Zielnummer gespeichert werden kann. Bereits gespeicherte Telefonanzeigen werden dadurch nicht rückwirkend geändert.
+
 ## 1.3.1 – 12.10.2026
 
 - Getrennte Bereiche für Gespräche und Warteschlange; „Alle Gespräche“ / „Eigene Gespräche“ als Umschalter.

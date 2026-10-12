@@ -122,7 +122,8 @@ final class Runtime
         return $this->ami->action('Originate', [
             'Channel'=>'PJSIP/' . $client['extension'], 'ChannelId'=>'kf-' . $id,
             'Context'=>$this->config['telephony']['originate_context'], 'Exten'=>$number, 'Priority'=>'1', 'Async'=>'true', 'EarlyMedia'=>'false',
-            'Timeout'=>$this->config['telephony']['originate_timeout_ms'], 'CallerID'=>'Rueckruf <' . $number . '>',
+            // A workflow label must not become the remote party's display name.
+            'Timeout'=>$this->config['telephony']['originate_timeout_ms'], 'CallerID'=>$number . ' <' . $number . '>',
             'Variable'=>['__KF_C2D_ID=' . $id, '__KF_C2D_CLIENT=' . $clientId, '__KF_C2D_EXTENSION=' . $client['extension']],
         ], null, 'kf-c2d-' . $id)->then(function () use ($id) {
             if ($this->outgoing[$id]['phase'] === 'requested') $this->outgoing[$id]['phase'] = 'ringing_extension';
