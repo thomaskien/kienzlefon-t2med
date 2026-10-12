@@ -3,27 +3,28 @@ declare(strict_types=1);
 
 namespace Kienzlefon\Installer;
 
-require_once dirname(__DIR__) . '/src/Config.php';
+$autoload = dirname(__DIR__) . '/vendor/autoload.php';
+if (!is_file($autoload)) {
+    throw new \RuntimeException('Composer-Abhängigkeiten fehlen.');
+}
+require_once $autoload;
+
+use Kienzlefon\Config;
 
 final class ConfigurationError extends \RuntimeException {}
 
 /** @return array<string,mixed> */
-function loadJsonFile(string $path): array
+function loadConfigFile(string $path): array
 {
-    $raw = @file_get_contents($path);
-    if ($raw === false) {
-        throw new ConfigurationError("Konfiguration kann nicht gelesen werden: {$path}");
-    }
     try {
-        $value = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
-    } catch (\JsonException $e) {
-        throw new ConfigurationError('Ungültiges JSON: ' . $e->getMessage());
+        return Config::read($path);
+    } catch (\Throwable) {
+        throw new ConfigurationError('Konfiguration kann nicht sicher gelesen werden.');
     }
-    if (!is_array($value)) {
-        throw new ConfigurationError('Die Konfiguration muss ein JSON-Objekt sein.');
-    }
-    return $value;
 }
+
+/** @deprecated Legacy test helper. */
+function loadJsonFile(string $path): array { return loadConfigFile($path); }
 
 function text(mixed $value, string $name, bool $allowEmpty = false): string
 {
@@ -157,9 +158,14 @@ function buildConfig(array $answers, ?array $existing = null): array
         throw new ConfigurationError('Der GDT-Root darf nicht das Dateisystem-Wurzelverzeichnis sein.');
     }
 
+    $listenHost = '0.0.0.0';
+    if (isset($existing['http']['listen']) && is_string($existing['http']['listen'])
+        && preg_match('/^(.*):[0-9]{1,5}$/D', $existing['http']['listen'], $existingListen)) {
+        $listenHost = $existingListen[1];
+    }
     $config = [
         'http' => [
-            'listen' => '0.0.0.0:' . $listenPort,
+            'listen' => $listenHost . ':' . $listenPort,
             'public_url' => $publicUrl,
             'allowed_hosts' => $allowedHosts,
             'allowed_networks' => ['127.0.0.0/8', '::1/128', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', 'fc00::/7'],
@@ -199,7 +205,12 @@ function buildConfig(array $answers, ?array $existing = null): array
     if ($existing !== null) {
         $config['http']['allowed_networks'] = $existing['http']['allowed_networks'];
         $config['http']['allowed_hosts'] = array_values(array_unique(array_merge($existing['http']['allowed_hosts'], $config['http']['allowed_hosts'])));
-        $config['telephony'] = array_replace($existing['telephony'], ['extensions'=>array_replace($existing['telephony']['extensions'], $extensions)]);
+        $preservedExtensions = $existing['telephony']['extensions'];
+        foreach ($existing['clients'] as $client) {
+            $oldExtension = $client['extension'];
+            if (!isset($extensions[$oldExtension])) unset($preservedExtensions[$oldExtension]);
+        }
+        $config['telephony'] = array_replace($existing['telephony'], ['extensions'=>array_replace($preservedExtensions, $extensions)]);
         foreach (['timeout_seconds','cache_seconds'] as $key) $config['aps'][$key] = $existing['aps'][$key];
         foreach (['filename','sender','receiver'] as $key) $config['gdt'][$key] = $existing['gdt'][$key];
     }
@@ -247,7 +258,7 @@ function validateConfig(array $config): array
             throw new ConfigurationError("Client {$id} entspricht nicht exakt dem Beispielschema.");
         }
     }
-    try { return \Kienzlefon\Config::validate($config); }
+    try { return Config::validate($config); }
     catch (\Throwable $e) { throw new ConfigurationError($e->getMessage()); }
 }
 
@@ -321,12 +332,16 @@ function interactiveAnswers(?array $existing): array
     } else {
         $answers['ami_secret'] = prompt('AMI-Secret', '', true);
     }
-    if ($existing !== null && yesNoPrompt('Vorhandene Arbeitsplätze beibehalten', true)) {
-        $answers['clients'] = $existing['clients'];
-        return $answers;
-    }
     $answers['clients'] = [];
-    fwrite(STDERR, "Clients eingeben; leere Client-ID beendet die Liste.\n");
+    foreach (($existing['clients'] ?? []) as $id => $client) {
+        if (yesNoPrompt("Arbeitsplatz {$id} entfernen", false)) continue;
+        $answers['clients'][$id] = [
+            'label' => prompt("Label für {$id}", (string)$client['label']),
+            'extension' => prompt("Nebenstelle für {$id}", (string)$client['extension']),
+            'directory' => prompt("Verzeichnis für {$id}", (string)$client['directory']),
+        ];
+    }
+    fwrite(STDERR, "Weitere Clients eingeben; leere Client-ID beendet die Liste.\n");
     while (true) {
         $id = prompt('Client-ID', '');
         if ($id === '') {
@@ -341,20 +356,48 @@ function interactiveAnswers(?array $existing): array
     return $answers;
 }
 
+function writeToml(string $path, array $config): void
+{
+    $validated = validateConfig($config);
+    try {
+        $toml = Config::encodeToml($validated);
+    } catch (\Throwable) {
+        throw new ConfigurationError('TOML-Konfiguration konnte nicht erzeugt werden.');
+    }
+    if (@file_put_contents($path, $toml, LOCK_EX) === false) {
+        throw new ConfigurationError('Temporäre Konfiguration konnte nicht geschrieben werden.');
+    }
+    @chmod($path, 0600);
+    try {
+        $roundTrip = Config::load($path);
+    } catch (\Throwable) {
+        @unlink($path);
+        throw new ConfigurationError('TOML-Konfiguration hat die Kontrollprüfung nicht bestanden.');
+    }
+    if ($roundTrip !== $validated) {
+        @unlink($path);
+        throw new ConfigurationError('TOML-Konfiguration ist nicht verlustfrei serialisierbar.');
+    }
+}
+
 function main(array $argv): int
 {
     try {
         $command = $argv[1] ?? '';
         if ($command === 'validate' && isset($argv[2])) {
-            validateConfig(loadJsonFile($argv[2]));
+            Config::load($argv[2]);
+            return 0;
+        }
+        if ($command === 'migrate' && isset($argv[2], $argv[3])) {
+            writeToml($argv[3], Config::load($argv[2]));
             return 0;
         }
         if ($command === 'check-listen' && isset($argv[2])) {
-            checkListen(validateConfig(loadJsonFile($argv[2])));
+            checkListen(Config::load($argv[2]));
             return 0;
         }
         if ($command === 'paths' && isset($argv[2])) {
-            $config = validateConfig(loadJsonFile($argv[2]));
+            $config = Config::load($argv[2]);
             echo $config['gdt']['root'], "\n";
             foreach ($config['clients'] as $client) {
                 echo $client['directory'], "\n";
@@ -363,19 +406,15 @@ function main(array $argv): int
         }
         if ($command === 'interactive' && isset($argv[2])) {
             $existingPath = $argv[3] ?? '';
-            $existing = $existingPath !== '' ? loadJsonFile($existingPath) : null;
+            $existing = $existingPath !== '' ? Config::load($existingPath) : null;
             if ($existing !== null) {
                 validateConfig($existing);
             }
             $config = buildConfig(interactiveAnswers($existing), $existing);
-            $json = json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) . "\n";
-            if (@file_put_contents($argv[2], $json, LOCK_EX) === false) {
-                throw new ConfigurationError('Temporäre Konfiguration konnte nicht geschrieben werden.');
-            }
-            @chmod($argv[2], 0600);
+            writeToml($argv[2], $config);
             return 0;
         }
-        fwrite(STDERR, "Aufruf: configure.php validate DATEI | check-listen DATEI | paths DATEI | interactive AUSGABE [BESTEHEND]\n");
+        fwrite(STDERR, "Aufruf: configure.php validate DATEI | migrate JSON TOML | check-listen DATEI | paths DATEI | interactive AUSGABE [BESTEHEND]\n");
         return 2;
     } catch (\Throwable $e) {
         fwrite(STDERR, 'Konfigurationsfehler: ' . $e->getMessage() . "\n");

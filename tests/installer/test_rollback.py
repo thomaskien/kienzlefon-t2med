@@ -25,6 +25,9 @@ class RollbackTests(unittest.TestCase):
                 key = name + '_FILE' if name in ('CONFIG', 'UNIT') else name
                 values.update({key: str(target), name + '_EXISTED': '0', name + '_BACKUP': ''})
             values.update(CONFIG_TOUCHED='0', UNIT_TOUCHED='0', SMB_TOUCHED='0')
+            legacy = root / 'config.json'
+            legacy.write_text('old-legacy-json')
+            values['LEGACY_CONFIG_FILE'] = str(legacy)
             if touched:
                 backup = work / 'app.backup'
                 app.rename(backup)
@@ -39,6 +42,16 @@ class RollbackTests(unittest.TestCase):
                     target.write_text('new-' + filename)
                     values.update({name + '_EXISTED': '1', name + '_BACKUP': str(backup)})
                 values.update(CONFIG_TOUCHED='1', UNIT_TOUCHED='1', SMB_TOUCHED='1')
+            if touched == 'migration':
+                config = root / 'config'
+                config.write_text('new-toml')
+                unit = root / 'unit'
+                unit_backup = work / 'unit.backup'
+                unit_backup.write_text(unit.read_text())
+                unit.write_text('new-toml-unit')
+                values.update(CONFIG_EXISTED='0', CONFIG_TOUCHED='1',
+                              UNIT_EXISTED='1', UNIT_TOUCHED='1', UNIT_BACKUP=str(unit_backup),
+                              SERVICE_TOUCHED='1', SERVICE_WAS_ACTIVE='1')
             source = (ROOT / 'installer/install.sh').read_text()
             rollback = source[source.index('rollback() {'):source.index('trap rollback')]
             script = '\n'.join(k + '=' + shlex.quote(v) for k, v in values.items())
@@ -47,7 +60,11 @@ class RollbackTests(unittest.TestCase):
             self.assertEqual(result.returncode, 1, result.stderr)
             self.assertEqual((app / 'payload').read_text(), 'old-app')
             for filename in ['config', 'unit', 'smb-main', 'smb-include']:
-                self.assertEqual((root / filename).read_text(), 'old-' + filename)
+                if touched == 'migration' and filename == 'config':
+                    self.assertFalse((root / filename).exists())
+                else:
+                    self.assertEqual((root / filename).read_text(), 'old-' + filename)
+            self.assertEqual(legacy.read_text(), 'old-legacy-json')
 
     def test_failure_before_first_managed_write_preserves_existing_files(self):
         self.run_rollback(None)
@@ -57,6 +74,9 @@ class RollbackTests(unittest.TestCase):
 
     def test_failure_after_all_changes_restores_exact_originals(self):
         self.run_rollback('all')
+
+    def test_failed_first_json_migration_removes_toml_and_preserves_json(self):
+        self.run_rollback('migration')
 
 
 if __name__ == '__main__':

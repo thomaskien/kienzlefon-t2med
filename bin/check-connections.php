@@ -7,8 +7,8 @@ use React\EventLoop\Loop;
 use function React\Promise\all;
 
 $options = getopt('', ['config:', 'help']);
-if (isset($options['help'])) { echo "php bin/check-connections.php --config=/etc/kienzlefon-t2med/config.json\nPrüft APS-Anmeldung und lesende AMI-Aktionen. Kein Telefonat und keine GDT-Datei.\n"; exit(0); }
-try { $config = Config::load($options['config'] ?? '/etc/kienzlefon-t2med/config.json'); }
+if (isset($options['help'])) { echo "php bin/check-connections.php --config=/etc/kienzlefon-t2med/config.toml\nPrüft APS-Anmeldung und lesende AMI-Aktionen. Kein Telefonat und keine GDT-Datei.\n"; exit(0); }
+try { $config = Config::load($options['config'] ?? Config::defaultPath()); }
 catch (Throwable $e) { fwrite(STDERR, $e->getMessage() . "\n"); exit(1); }
 $ami = new Ami($config['ami']); $aps = new Aps($config['aps'], $config['telephony']['country_code']);
 $done = 0; $failed = false;

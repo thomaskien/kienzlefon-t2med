@@ -170,8 +170,16 @@ function render(data, unreachable = false) {
   const own = conversations.filter(c => currentExtension && c.extensions.includes(currentExtension)), others = conversations.filter(c => !own.includes(c));
   reconcile($('calls'),conversations.length ? conversations.map(c => callCard(c)) : [el('p','empty',stale ? 'Aktueller Gesprächsstatus nicht verfügbar.' : 'Zurzeit keine Gespräche.')]);
   reconcile($('compact-own'),own.map(c => compactRow(c,null,`own-${c.id}`,true)));
-  reconcile($('compact-others'),others.map(c => compactRow(c,null,`other-${c.id}`)));
-  $('more-toggle').textContent = `${others.length ? others.length + ' weitere · ' : ''}${data.extensions.length} Nst.`;
+  const otherCalls = others.map(c => {
+    const row = compactRow(c,null,`all-${c.id}`);
+    row.querySelector('.row-mark').textContent = c.extensions[0] || '☎';
+    row.querySelector('.row-mark').title = c.extensions.length ? `Nebenstellen ${c.extensions.join(', ')}` : 'Nebenstelle noch unbekannt';
+    return row;
+  });
+  reconcile($('compact-all-calls'),otherCalls.length ? otherCalls : [el('p','compact-empty',stale ? 'Gesprächsstatus nicht verfügbar.' : own.length ? 'Keine weiteren Gespräche.' : 'Zurzeit keine Gespräche.')]);
+  $('conversations-toggle').textContent = `Alle Gespräche (${stale ? '–' : conversations.length}) ${$('compact-conversations').hidden ? '▾' : '▴'}`;
+  $('conversations-toggle').setAttribute('aria-label',`Alle laufenden Gespräche (${stale ? 'Status unbekannt' : conversations.length})`);
+  $('more-toggle').textContent = `Nst. (${data.extensions.length})`;
   const extNodes = [], compactExtensions = [];
   for (const ext of data.extensions) {
     const state = stale ? 'unknown' : ext.state, status = (extensionLabels[state] || state) + (ext.paused ? ' · Pausiert' : '');
@@ -183,7 +191,7 @@ function render(data, unreachable = false) {
   $('updated').textContent = stale ? 'Nicht aktuell' : new Date(data.generated_at).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   $('outgoing-panel').hidden = !data.outgoing.length;
   reconcile($('outgoing'),data.outgoing.slice().reverse().map(call => { const row = el('div','call'); row.dataset.key = call.request_id; row.append(el('span',null,`${call.extension} → ${call.number}`),el('span','muted',labels[call.phase] || call.phase)); return row; }));
-  const presentKeys = new Set([...own.map(c => `own-${c.id}`),...others.map(c => `other-${c.id}`),...compactWaiting.map(n => n.dataset.key)]);
+  const presentKeys = new Set([...own.map(c => `own-${c.id}`),...others.map(c => `all-${c.id}`),...compactWaiting.map(n => n.dataset.key)]);
   for (const key of expanded) if (!presentKeys.has(key)) expanded.delete(key);
 }
 async function poll() {
@@ -231,6 +239,11 @@ document.addEventListener('click',e => {
   if (action === 'tools') showTools(!document.body.classList.contains('tools-open'));
   else if (action === 'full' || action === 'compact') setView(action);
   else if (action === 'more') { $('compact-more').hidden = !$('compact-more').hidden; button.setAttribute('aria-expanded',String(!$('compact-more').hidden)); }
+  else if (action === 'conversations') {
+    const open = $('compact-conversations').hidden; $('compact-conversations').hidden = !open; button.setAttribute('aria-expanded',String(open));
+    try { sessionStorage.setItem('kienzlefon.allCalls',String(open)); } catch {}
+    if (latestData) render(latestData);
+  }
   else if (action === 'setup') { $('client-setup').hidden = !$('client-setup').hidden; button.setAttribute('aria-expanded',String(!$('client-setup').hidden)); updateSetup(); }
   else if (action === 'detail') { const key = button.dataset.detail; if (expanded.has(key)) expanded.delete(key); else expanded.add(key); if (latestData) render(latestData); }
   else if (action === 'patient') {
@@ -246,9 +259,11 @@ async function boot() {
   if (query.has('telefon')) { const url = new URL(location.href); for (const key of ['telefon','sofort','expected_extension']) url.searchParams.delete(key); history.replaceState(null,'',url); }
   let savedView = '', savedClient = ''; try { savedView = localStorage.getItem('kienzlefon.view') || ''; savedClient = localStorage.getItem('kienzlefon.client') || ''; } catch {}
   setView(query.get('view') || savedView || 'compact',false);
+  try { const open = sessionStorage.getItem('kienzlefon.allCalls') === 'true'; $('compact-conversations').hidden = !open; $('conversations-toggle').setAttribute('aria-expanded',String(open)); } catch {}
   $('setup-os').value = /Mac/.test(navigator.platform) ? 'macos' : /Linux/.test(navigator.platform) ? 'linux' : 'windows';
   try {
     const info = await api('/api/v1/bootstrap'); token = info.token; clients = info.clients; demo = info.demo; $('demo').hidden = !demo; $('compact-demo').hidden = !demo;
+    if (info.version) { $('app-version').textContent = `kienzlefon T2med · Version ${info.version}`; $('app-version').hidden = false; }
     for (const client of clients) { const option = el('option',null,`${client.label} · ${client.extension}`); option.value = client.id; $('client').append(option); }
     const chosen = query.get('client_id') || savedClient;
     if (clients.some(c => c.id === chosen)) $('client').value = chosen;

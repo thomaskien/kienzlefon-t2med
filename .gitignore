@@ -9,6 +9,7 @@ GDT/
 .runtime/
 vendor/
 config.json
+config.toml
 .env
 *.pem
 *.key

@@ -15,11 +15,12 @@ bash -n installer/install.sh clients/install-linux.sh clients/install-macos.sh
 bash installer/install.sh --dry-run
 ```
 
-Lokal geprüft am 11.10.2026: 27 PHP-Kerntests, 26 Installer-Prüfungen, 12 Clienttests, drei Rollbacktests und sieben Integrationstests. Die GitHub-Actions-Konfiguration wiederholt die Tests unter Linux mit PHP 8.2 und 8.4. Ein eingecheckter Workflow allein bestätigt noch keinen erfolgreichen CI-Lauf.
+Lokal geprüft für Version 1.3 am 12.10.2026: 31 PHP-Kerntests, 31 PHP-Installerprüfungen, 20 Python-Installerprüfungen, 27 Clienttests, zehn Integrationstests und zwölf Browser-Szenarien. Ein zusätzlicher Linux-spezifischer Socket-Test wird auf macOS übersprungen. GitHub Actions wiederholt die Tests unter Linux mit PHP 8.2 und 8.4 sowie Chromium.
 
 Die Integrationstests starten simulierte AMI- und HTTPS-APS-Server ausschließlich auf Loopback sowie den echten PHP-Dienst mit temporärer Konfiguration. Es werden keine Praxisserver kontaktiert und keine echten Patientenakten geöffnet. Prüffälle:
 
 - APS-Basic-Auth mit leerem Passwort und `ignoreSichtbarkeit: false`.
+- Gleiche APS-Treffer und gemeinsamer Cache für nationale Rufnummern, `+49…`, `0049…` und `49…`, auch wenn APS nur eine Schreibweise findet.
 - Mehrere Patienten, keine Treffer, unveränderte Referenzen zur internen Auswahlprüfung.
 - GDT-Format, Arbeitsplatztrennung, kein Überschreiben und Wiederholung desselben Auftrags nach simulierter Dateiübernahme.
 - Host-/Origin-/Token-Prüfung, Patientennummern- und Pfadeingaben, GET ohne Dateiänderung.
@@ -27,15 +28,17 @@ Die Integrationstests starten simulierte AMI- und HTTPS-APS-Server ausschließli
 - Originate nur einmal je Auftrags-ID, keine Connected-Meldung allein aufgrund der AMI-Annahme oder einer frühen Medienbrücke.
 - Zweiter Rufabschnitt direkt und über Local-Kanäle; Verbindung erst bei beantwortetem Ziel und nachgewiesener Brückenverbindung.
 - AMI-Ausfall, veralteter Zustand, Wiederverbindung und Hangup während des Bestandsabgleichs.
-- Bestehende Samba-Konfiguration, Konflikte und idempotente Planung; die drei Shell-Rollbacktests führen die tatsächliche Wiederherstellungsfunktion gegen temporäre Dateien aus.
+- Bestehende Samba-Konfiguration, Konflikte und idempotente Planung; vier Shell-Rollbacktests führen die tatsächliche Wiederherstellungsfunktion gegen temporäre Dateien aus.
+- TOML im laufenden Dienst; verlustfreie JSON-Migration mit Sonderzeichen und leeren Werten, generische Parserfehler ohne Secrets und Vorrang vorhandener TOML-Dateien.
+- Installer-Nachfrage im Terminal, Beibehalten einschließlich TOML-Kommentaren, `--keep-config`, Übernahme ohne Terminal sowie Änderung und Ergänzung vorhandener Arbeitsplätze. Fehlgeschlagene Erst-Migration stellt die bisherige JSON-Installation wieder her.
 
 Im Browser wurden mit der Demo Arbeitsplatzwahl, Namensauswahl, Mehrfachtreffer, Rufnummernsuche, Akten-Weblink und Rückrufdialog geprüft. Die Demo schreibt keine GDT-Dateien und startet kein Telefonat.
 
 ## Nach Installation auf dem Linux-Server
 
 ```sh
-sudo -u kienzlefon-t2med php /opt/kienzlefon-t2med/bin/server.php --config=/etc/kienzlefon-t2med/config.json --check-config
-sudo -u kienzlefon-t2med php /opt/kienzlefon-t2med/bin/check-connections.php --config=/etc/kienzlefon-t2med/config.json
+sudo -u kienzlefon-t2med php /opt/kienzlefon-t2med/bin/server.php --config=/etc/kienzlefon-t2med/config.toml --check-config
+sudo -u kienzlefon-t2med php /opt/kienzlefon-t2med/bin/check-connections.php --config=/etc/kienzlefon-t2med/config.toml
 ```
 
 Der zweite Befehl prüft Anmeldung und lesende Aktionen. Er meldet keine Patienteninformationen und löst kein Originate oder GDT aus. Setvar-/Originate-Rechte werden erst beim jeweiligen Funktionstest mitgeprüft. Eine technisch gültige APS-Antwort allein belegt nicht die Sichtbarkeit aller Praxispatienten.
@@ -67,7 +70,9 @@ Wartenden, Details/Mehrdeutigkeit, Fokus bei Polling und Entfernen einer
 vorhergehenden Zeile, Offline/Recovery, unterdrückte Rufnummer, leerer/voller
 Monitor, Übersicht, Touch-Ziele, Geburtsdatum, Direktwahl und GDT ohne
 Wiederholung bei Reload/Zurück, Standard-Wählbestätigung sowie abweichende lokale
-Nebenstellenzuordnung. Verdeckte Ansichten pollen weiter; Direktaktionen warten
+Nebenstellenzuordnung. „Alle Gespräche“ bleibt nach Polling, Ansichtwechsel und
+Reload geöffnet, zeigt weitere Nebenstellen ohne Verdopplung des eigenen Gesprächs
+und reagiert auf Hangup und Verbindungsverlust. Verdeckte Ansichten pollen weiter; Direktaktionen warten
 auf Sichtbarkeit. Es werden keine echten Anrufe oder GDT-Dateien erzeugt.
 
 `UI_BROWSER_CHANNEL=chrome` verwendet ein vorhandenes Chrome mit isoliertem
@@ -76,11 +81,7 @@ Ansicht mit fiktiven Daten. Die tatsächliche Windows-Taskleistenanzeige, Browse
 Drosselung im minimierten Zustand und Betriebssystem-Standardzuordnungen brauchen
 weiterhin die Prüfung auf dem jeweiligen Arbeitsplatz.
 
-Stand 12.10.2026 für Kompaktansicht und Desktop-Clients: 30 PHP-Kerntests,
-26 PHP-Installerprüfungen, 27 Clienttests, 8 Integrationstests und 11
-Browser-Szenarien erfolgreich. Die Python-Installer-Suite hat lokal 10 Tests
-bestanden; der zusätzliche Linux-spezifische Socket-Test wird auf macOS
-übersprungen und in CI unter Linux ausgeführt. Die macOS-Launcher- und
+Die macOS-Launcher- und
 Standardzuordnungs-Skripte wurden in einem temporären Verzeichnis erfolgreich
 kompiliert, ohne sie zu registrieren oder auszuführen. Windows PowerShell und
 echte Desktop-Standardzuordnungen wurden lokal nicht ausgeführt.

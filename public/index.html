@@ -7,9 +7,10 @@
   <header class="compact-head"><strong id="compact-extension" title="Eigene Nebenstelle">–</strong><span id="compact-counts">Verbinde …</span><span id="compact-demo" class="demo-tag" hidden>DEMO</span><span id="compact-connection" class="status-dot" role="status" aria-label="Verbinde …" title="Verbinde …"></span><button class="icon-button" id="menu-toggle" data-action="tools" aria-label="Suche, Wählen und Arbeitsplatz" aria-expanded="false" aria-controls="tools">☰</button></header>
   <div id="compact-offline" class="compact-warning" hidden>Keine aktuellen Telefoniedaten</div>
   <div id="compact-own" aria-label="Eigene Gespräche"></div>
+  <section id="compact-conversations" aria-label="Weitere laufende Gespräche" hidden><h2 class="compact-queue-title">Weitere Nebenstellen</h2><div id="compact-all-calls"></div></section>
   <div id="compact-waiting" aria-label="Wartende Anrufe"><p class="compact-empty">Anrufe werden geladen …</p></div>
-  <footer class="compact-foot"><button id="more-toggle" data-action="more" aria-expanded="false" aria-controls="compact-more">Nebenstellen</button><button data-action="full">Übersicht ↗</button></footer>
-  <div id="compact-more" hidden><div id="compact-others"></div><div id="compact-extensions"></div></div>
+  <footer class="compact-foot"><button id="conversations-toggle" data-action="conversations" aria-expanded="false" aria-controls="compact-conversations">Alle Gespräche ▾</button><button id="more-toggle" data-action="more" aria-expanded="false" aria-controls="compact-more">Nebenstellen</button><button data-action="full">Übersicht ↗</button></footer>
+  <div id="compact-more" hidden><div id="compact-extensions"></div></div>
 </section>
 <div class="full-only heading"><div><p class="eyebrow">PRAXISTELEFONIE</p><h1>Telefonieübersicht</h1></div></div>
 <div id="demo" class="notice full-only" hidden>Demo mit fiktiven Patientendaten. Aktenaufrufe und Telefonate werden nur simuliert.</div>
@@ -18,6 +19,7 @@
   <div class="tools-head"><label class="workplace">Arbeitsplatz<select id="client"><option value="">Arbeitsplatz wählen</option></select></label><button class="text-button compact-only" data-action="tools" aria-label="Menü schließen">Schließen</button></div>
   <section class="search-panel" aria-labelledby="search-title"><div><h2 id="search-title">Suchen &amp; wählen</h2></div><form id="search-form"><label class="sr-only" for="number">Telefonnummer</label><input id="number" name="number" type="tel" autocomplete="off" placeholder="Telefonnummer" required><button type="submit" class="primary">Patient suchen</button><button type="button" id="dial" class="secondary">Anrufen</button></form></section>
   <div class="tools-links"><button class="text-button" data-action="popup">Eigenes Kompaktfenster ↗</button><button class="text-button" data-action="setup" aria-controls="client-setup" aria-expanded="false">Telefonie-App einrichten</button></div>
+  <p id="app-version" class="muted" hidden></p>
   <section id="client-setup" class="setup-panel" hidden><h2>Telefonie-App einrichten</h2><p>Verknüpft <code>tel:</code> und <code>callto:</code> mit diesem Arbeitsplatz. Python 3.9 oder neuer wird benötigt.</p><p id="setup-workplace"></p><p><a href="https://github.com/thomaskien/kienzlefon-t2med/archive/refs/heads/main.zip" target="_blank" rel="noopener noreferrer">Installationsdateien herunterladen</a></p><p>ZIP entpacken und im Projektordner den passenden Befehl ausführen:</p><label for="setup-os">Betriebssystem</label><select id="setup-os"><option value="windows">Windows · PowerShell</option><option value="macos">macOS · Terminal</option><option value="linux">Linux · Terminal</option></select><pre id="setup-command"></pre><p id="setup-hint"></p><a href="https://github.com/thomaskien/kienzlefon-t2med/blob/main/docs/CLIENTS.md" target="_blank" rel="noopener noreferrer">Anleitung und Standard-App-Auswahl ↗</a></section>
   <section id="outgoing-panel" class="panel" hidden><div class="section-head"><h2>Rückrufaufträge</h2></div><div id="outgoing"></div></section>
 </section>

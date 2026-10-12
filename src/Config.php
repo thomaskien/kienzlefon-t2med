@@ -2,16 +2,57 @@
 declare(strict_types=1);
 namespace Kienzlefon;
 
+use Devium\Toml\Toml;
+
 final class Config
 {
     public static function load(string $path): array
     {
+        return self::validate(self::read($path));
+    }
+
+    public static function read(string $path): array
+    {
         if (!is_file($path) || !is_readable($path)) {
             throw new \RuntimeException('Konfiguration nicht lesbar: ' . $path);
         }
-        $data = json_decode(file_get_contents($path), true, 64, JSON_THROW_ON_ERROR);
+        $raw = @file_get_contents($path);
+        if ($raw === false) {
+            throw new \RuntimeException('Konfiguration nicht lesbar: ' . $path);
+        }
+        $extension = strtolower((string)pathinfo($path, PATHINFO_EXTENSION));
+        if (!in_array($extension, ['toml', 'json'], true)) {
+            throw new \InvalidArgumentException('Konfigurationsformat muss TOML oder JSON sein.');
+        }
+        try {
+            $data = match ($extension) {
+                'toml' => Toml::decode($raw, asArray: true),
+                'json' => json_decode($raw, true, 64, JSON_THROW_ON_ERROR),
+            };
+        } catch (\Throwable) {
+            throw new \InvalidArgumentException(
+                $extension === 'json' ? 'Ungültige JSON-Konfiguration.' : 'Ungültige TOML-Konfiguration.'
+            );
+        }
         if (!is_array($data)) throw new \InvalidArgumentException('Konfiguration muss ein Objekt sein.');
-        return self::validate($data);
+        return $data;
+    }
+
+    public static function encodeToml(array $config): string
+    {
+        try {
+            $encoded = Toml::encode($config);
+        } catch (\Throwable) {
+            throw new \InvalidArgumentException('Konfiguration kann nicht als TOML serialisiert werden.');
+        }
+        return rtrim($encoded, "\r\n") . "\n";
+    }
+
+    public static function defaultPath(): string
+    {
+        $toml = '/etc/kienzlefon-t2med/config.toml';
+        $json = '/etc/kienzlefon-t2med/config.json';
+        return !file_exists($toml) && !is_link($toml) && is_file($json) ? $json : $toml;
     }
 
     public static function validate(array $c): array

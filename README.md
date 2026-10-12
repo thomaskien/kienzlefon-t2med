@@ -2,6 +2,9 @@
 
 Zentrale PHP-Middleware zwischen Asterisk und T2med: Anrufer erkennen, Warteschlangen und Gespräche im Browser anzeigen, Patientenakten über GDT öffnen und Rückrufe vom richtigen Arbeitsplatz starten.
 
+Aktuelle Version: **1.3** · [Änderungen](CHANGELOG.md). Die Version steht auch im
+Webmenü, unter `/healthz` und in `php bin/server.php --version`.
+
 ## Funktionen
 
 - Kompaktansicht für den Arbeitsplatz (ca. 250 × 160 px bei einem eigenen Gespräch und zwei Wartenden), aufklappbare Patientenauswahl und vollständige Übersicht.
@@ -24,7 +27,13 @@ cd kienzlefon-t2med
 sudo bash installer/install.sh
 ```
 
-Der Installer installiert fehlende PHP-/Composer-Pakete und fragt APS- und AMI-Server samt Zugangsdaten, Middleware-Adresse und Arbeitsplätze ab. Ein ausdrücklich leeres APS-Passwort ist gültig. Die bestehende APS-Zertifikatsausnahme kann für den Integrationstest eingestellt werden. Konfiguration: `/etc/kienzlefon-t2med/config.json`; Dienst: `kienzlefon-t2med.service`.
+Der Installer installiert fehlende PHP-/Composer-Pakete und fragt APS- und AMI-Server samt Zugangsdaten, Middleware-Adresse und Arbeitsplätze ab. Ein ausdrücklich leeres APS-Passwort ist gültig. Die bestehende APS-Zertifikatsausnahme kann für den Integrationstest eingestellt werden. Konfiguration: `/etc/kienzlefon-t2med/config.toml`; Dienst: `kienzlefon-t2med.service`.
+
+Bei erneuter Installation fragt der Installer im Terminal, ob Einstellungen
+geändert werden sollen. Vorhandene Werte werden dabei angeboten. Ohne Änderungen
+bleiben die Einstellungen erhalten; eine ältere `config.json` wird in TOML
+übernommen und bleibt als Altbestand erhalten. `--keep-config` überspringt die
+Nachfrage, `--reconfigure` öffnet direkt den Assistenten.
 
 Bei vorhandenem Samba werden dessen globale Authentifizierung und fremde Freigaben erhalten. Ist Guestzugriff damit nicht kompatibel, meldet der Installer den Konflikt. Mit `--skip-samba` lässt sich eine separat eingerichtete Freigabe verwenden. Details und Arbeitsplatzregistrierungen stehen in [Installation und Betrieb](docs/INSTALLATION.md).
 

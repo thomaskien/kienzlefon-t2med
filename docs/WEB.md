@@ -11,7 +11,14 @@ Verbindungsstatus. DEMO bleibt erkennbar. Eigene Verbindungen stehen vor der
 Warteliste. Wartende erscheinen pro Queue in der gemeldeten Position; bei mehreren
 belegten Queues kennzeichnet eine Überschrift deren getrennte Reihenfolge. Die
 Warteliste scrollt unabhängig, während eigene Verbindung und Fußzeile erreichbar
-bleiben. Andere Gespräche und Nebenstellen sind über die Fußzeile erreichbar.
+bleiben. **Alle Gespräche** in der Fußzeile klappt die Verbindungen aller
+Nebenstellen einschließlich der eigenen auf. Die Liste zeigt Nebenstelle, Name
+bzw. Rufnummer und Dauer; Details und Aktenaufruf bleiben verfügbar. Diese Wahl
+bleibt während der Tab-Sitzung gespeichert, auch bei Polling, Ansichtswechsel und
+Neuladen. Ein erneuter Klick klappt sie ein. Nebenstellen haben einen getrennten
+Schalter. Bei Verbindungsverlust werden auch hier keine alten Gespräche angezeigt.
+
+Die installierte Version steht im Menü unter den Einstellungen.
 
 Bei eindeutigem Treffer öffnet ein Klick auf den Patientennamen dessen Akte. Der
 kleine Pfeil klappt Rufnummer, Geburtsdatum, Patientennummer, Adresse und Rückruf
@@ -48,6 +55,8 @@ keinen Tray-Dienst und ändert keine Taskleisteneinstellungen.
 
 Basisadresse, `client_id` und Rufnummer entsprechend dem Arbeitsplatz einsetzen.
 `telefon` immer URL-kodieren, insbesondere ein internationales Plus als `%2B`.
+Bei Ländercode `49` werden vollständige Rufnummern in den Formen `0176…`,
+`+49176…`, `0049176…` und `49176…` für APS gemeinsam gesucht und gecacht.
 
 **Direkt wählen, ohne zusätzlichen Dialog:**
 

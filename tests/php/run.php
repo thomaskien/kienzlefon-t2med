@@ -17,7 +17,14 @@ test('Doppelte Arbeitsplatzverzeichnisse sind verboten', function () { $c=config
 test('Nebenstelle muss konfiguriert sein', function () { $c=config();$c['clients']['empfang-1']['extension']='999';rejects(fn()=>Config::validate($c)); });
 test('APS-URL darf keine Zugangsdaten enthalten', function () { $c=config();$c['aps']['url']='https://user:pass@host';rejects(fn()=>Config::validate($c)); });
 test('Steuerzeichen und ungültige Netzwerke werden verworfen', function () { $c=config();$c['ami']['secret']="a\r\nAction: Originate";rejects(fn()=>Config::validate($c));$c=config();$c['http']['allowed_networks']=['0.0.0.0/99'];rejects(fn()=>Config::validate($c)); });
-test('Nationale und internationale Rufnummern haben denselben Schlüssel', function () { eq(Phone::key('030 555-01111'),'+493055501111');eq(Phone::key('0049 (30) 55501111'),'+493055501111');eq(Phone::variants('+493055501111'),['+493055501111','03055501111','00493055501111']); });
+test('Nationale und internationale Rufnummern haben denselben Schlüssel', function () { eq(Phone::key('030 555-01111'),'+493055501111');eq(Phone::key('0049 (30) 55501111'),'+493055501111');eq(Phone::variants('+493055501111'),['03055501111','+493055501111','00493055501111','493055501111']); });
+test('Mobilnummern mit 0, +49, 0049 und 49 nutzen dieselben Suchvarianten', function () {
+ $variants=['01765550173','+491765550173','00491765550173','491765550173'];
+ foreach($variants as $number){eq(Phone::key($number),'+491765550173');eq(Phone::variants($number),$variants);}
+ eq(Phone::variants('0049 (176) 555-0173'),$variants);
+ eq(Phone::key('49123'),'49123');eq(Phone::key('0305550173'),'+49305550173');
+ eq(Phone::key('436601234567','43'),'+436601234567');eq(Phone::variants('+33612345678'),['+33612345678','0033612345678']);
+});
 test('Rufnummerninjektionen sind ungültig', function () { foreach (["030555\r\nAction: Originate",'123;456','123?x=3','++123','$(1234567)','anonymous'] as $v) rejects(fn()=>Phone::normalize($v)); });
 test('Interne und kurze Nummern werden nicht in APS gesucht', function () { eq(Phone::external('201',['201'=>'Empfang']), '');eq(Phone::external('anonymous'), ''); });
 test('APS-Mehrfachtreffer bleiben auch bei gleichem Namen getrennt', function () { $r=Aps::classify([[patient(90001),patient(90002)],[patient(90001)]],['03055501111']);eq($r['status'],'ambiguous');eq(count($r['patients']),2);eq($r['name'],'');eq($r['patients'][0]['_ref']['revision'],3); });

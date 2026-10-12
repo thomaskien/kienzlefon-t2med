@@ -47,6 +47,11 @@ class APS(http.server.BaseHTTPRequestHandler):
             rows.append({**rows[0], 'nummer': 90002, 'ref': {'objectId': {'id': 'test-2'}, 'revision': 1}})
         if number.endswith('00'):
             rows = []
+        # These fixtures model APS entries stored in only one spelling.
+        if number.endswith('73') and not number.startswith('0176'):
+            rows = []
+        if number.endswith('74') and not number.startswith('49176'):
+            rows = []
         body = json.dumps(rows).encode()
         self.send_response(200)
         self.send_header('Content-Type', 'application/json')
@@ -137,15 +142,16 @@ class MiddlewareIntegration(unittest.TestCase):
         config['aps'].update(url=f'https://127.0.0.1:{cls.aps.server_port}', username='test', password='', tls_verify=False)
         config['gdt']['root'] = str(cls.share)
         config['clients']['empfang-2'] = {'label': 'Empfang 2', 'extension': '202', 'directory': 'empfang-2'}
-        path = root / 'config.json'
-        path.write_text(json.dumps(config))
+        path = root / 'config.toml'
+        encoded = subprocess.run(['php', '-r', 'require "vendor/autoload.php"; echo Kienzlefon\\Config::encodeToml(json_decode(stream_get_contents(STDIN), true, 64, JSON_THROW_ON_ERROR));'], cwd=ROOT, input=json.dumps(config), text=True, capture_output=True, check=True)
+        path.write_text(encoded.stdout)
         os.chmod(path, 0o600)
         cls.log = open(root / 'server.log', 'w+')
         # Exercise the installed PHP invocation, including its service-specific INI settings.
         unit = (ROOT / 'installer/kienzlefon-t2med.service').read_text()
         launch = shlex.split(next(line.removeprefix('ExecStart=') for line in unit.splitlines() if line.startswith('ExecStart=')))
         launch[0] = shutil.which('php')
-        launch = [arg.replace('/opt/kienzlefon-t2med', str(ROOT)).replace('/etc/kienzlefon-t2med/config.json', str(path)) for arg in launch]
+        launch = [arg.replace('/opt/kienzlefon-t2med', str(ROOT)).replace('/etc/kienzlefon-t2med/config.toml', str(path)) for arg in launch]
         cls.process = subprocess.Popen(launch, cwd=ROOT, stdout=cls.log, stderr=cls.log)
         def ready():
             try:
@@ -215,6 +221,28 @@ class MiddlewareIntegration(unittest.TestCase):
         (self.share / 'empfang-2' / 'AUFRUFi.gdt').unlink()
         self.assertEqual(self.request('/api/v1/patient-open', {**request, 'patient_number': 99999, 'request_id': str(uuid.uuid4())})[0], 400)
         self.assertEqual(self.request('/api/v1/patient-open', {**request, 'client_id': '../other'})[0], 400)
+
+    def test_02_number_spellings_find_national_and_bare_international_aps_entries(self):
+        for suffix in ['73', '74']:
+            for initial in range(4):
+                national = f'0176555{initial}0{suffix}'
+                international = '49' + national[1:]
+                variants = [national, '+' + international, '00' + international, international]
+                start = len(self.aps.requests)
+                first = self.lookup(variants[initial])
+                self.assertEqual(first['status'], 'resolved')
+                self.assertEqual([p['patient_number'] for p in first['patients']], [90001])
+                self.assertEqual({q['suchmaske'] for q in self.aps.requests[start:]}, set(variants))
+                after_first = len(self.aps.requests)
+                for number in variants:
+                    result = self.lookup(number)
+                    self.assertEqual(result['lookup_id'], first['lookup_id'])
+                    self.assertEqual(result['patients'], first['patients'])
+                self.assertEqual(len(self.aps.requests), after_first)
+
+    def test_02_version_is_available_without_patient_lookup(self):
+        self.assertEqual(self.request('/api/v1/bootstrap')[1]['version'], '1.3')
+        self.assertEqual(self.request('/healthz')[1]['version'], '1.3')
 
     def test_03_http_controls_and_read_only_link(self):
         self.assertEqual(self.request('/api/v1/lookup', {'number': '03055501111'}, {'Origin': 'https://foreign.example'})[0], 403)

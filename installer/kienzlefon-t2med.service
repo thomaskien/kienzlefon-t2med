@@ -8,7 +8,7 @@ Type=simple
 User=kienzlefon-t2med
 Group=kienzlefon-t2med
 WorkingDirectory=/opt/kienzlefon-t2med
-ExecStart=/usr/bin/php -d pcre.jit=0 /opt/kienzlefon-t2med/bin/server.php --config=/etc/kienzlefon-t2med/config.json
+ExecStart=/usr/bin/php -d pcre.jit=0 /opt/kienzlefon-t2med/bin/server.php --config=/etc/kienzlefon-t2med/config.toml
 Restart=on-failure
 RestartSec=3s
 UMask=0007

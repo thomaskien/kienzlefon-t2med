@@ -3,7 +3,8 @@ set -eu
 
 APP_DIR=/opt/kienzlefon-t2med
 CONFIG_DIR=/etc/kienzlefon-t2med
-CONFIG_FILE=$CONFIG_DIR/config.json
+CONFIG_FILE=$CONFIG_DIR/config.toml
+LEGACY_CONFIG_FILE=$CONFIG_DIR/config.json
 UNIT_FILE=/etc/systemd/system/kienzlefon-t2med.service
 SMB_MAIN=/etc/samba/smb.conf
 SMB_INCLUDE=/etc/samba/kienzlefon-t2med.conf
@@ -11,6 +12,7 @@ SERVICE_USER=kienzlefon-t2med
 DRY_RUN=0
 SKIP_SAMBA=0
 RECONFIGURE=0
+KEEP_CONFIG=0
 WORK_DIR=
 MUTATING=0
 SUCCESS=0
@@ -44,16 +46,26 @@ Ubuntu 24.04+ oder Raspberry Pi OS Bookworm+.
   --dry-run       zeigt den Plan; funktioniert auch auf macOS und ändert nichts
   --reconfigure   fragt die Serverkonfiguration neu ab; Secrets können separat
                   beibehalten oder explizit leer gesetzt werden
+  --keep-config   überspringt bei Updates die Nachfrage nach Änderungen
   --skip-samba    richtet Samba nicht ein (Share muss extern bereitstehen)
   -h, --help      zeigt diese Hilfe
 
-Ohne --reconfigure bleibt eine vorhandene /etc/kienzlefon-t2med/config.json
-unverändert. Secrets werden nie als Kommandozeilenargument oder ins Log geschrieben.
+Vorhandenes TOML bleibt bei Ablehnung bytegleich. Eine vorhandene Legacy-JSON-Datei
+wird verlustfrei nach TOML migriert und als Sicherung nicht gelöscht. Secrets werden
+nie als Kommandozeilenargument oder ins Log geschrieben.
 EOF
 }
 
 say() { printf '%s\n' "$*"; }
 fail() { printf 'Fehler: %s\n' "$*" >&2; exit 1; }
+
+select_existing_config() {
+    if [ -f "$CONFIG_FILE" ]; then
+        printf '%s\n' "$CONFIG_FILE"
+    elif [ -f "$LEGACY_CONFIG_FILE" ]; then
+        printf '%s\n' "$LEGACY_CONFIG_FILE"
+    fi
+}
 
 start_middleware() {
     # Collect the actual startup error while the failed unit still exists.
@@ -76,22 +88,28 @@ while [ "$#" -gt 0 ]; do
         --dry-run) DRY_RUN=1 ;;
         --skip-samba) SKIP_SAMBA=1 ;;
         --reconfigure) RECONFIGURE=1 ;;
+        --keep-config) KEEP_CONFIG=1 ;;
         -h|--help) usage; exit 0 ;;
         *) usage >&2; fail "unbekannte Option: $1" ;;
     esac
     shift
 done
 
+[ "$RECONFIGURE" -eq 0 ] || [ "$KEEP_CONFIG" -eq 0 ] || fail "--reconfigure und --keep-config können nicht kombiniert werden."
+
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 SOURCE_ROOT=$(dirname "$SCRIPT_DIR")
 
 if [ "$DRY_RUN" -eq 1 ]; then
-    say "Dry-run: keine Dateien, Pakete, Benutzer oder Dienste werden verändert."
+    say "Dry-run: keine Fragen; keine Dateien, Pakete, Benutzer oder Dienste werden verändert."
     say "Plan: Plattform/PHP prüfen; Konfiguration validieren; Anwendung vollständig vorbereiten und austauschen."
     if [ "$RECONFIGURE" -eq 1 ]; then
         say "Plan: vorhandene Werte interaktiv neu konfigurieren; Secrets einzeln beibehalten oder ersetzen."
+    elif [ "$KEEP_CONFIG" -eq 1 ]; then
+        say "Plan: vorhandene Einstellungen ohne Nachfrage übernehmen; Legacy-JSON gegebenenfalls verlustfrei nach TOML migrieren."
     else
-        say "Plan: vorhandene Konfiguration unverändert verwenden; bei Erstinstallation interaktiv anlegen."
+        say "Plan: bei vorhandener Installation im Terminal nach Änderungen fragen; ohne Terminal Werte übernehmen; Legacy-JSON migrieren."
+        say "Plan: bei Erstinstallation die Konfiguration interaktiv anlegen."
     fi
     if [ "$SKIP_SAMBA" -eq 1 ]; then
         say "Plan: Samba auslassen; externes Share kienzlefon-GDT wird vorausgesetzt."
@@ -130,8 +148,9 @@ command -v systemctl >/dev/null 2>&1 || fail "systemd/systemctl fehlt."
 systemctl is-active --quiet smbd.service && SMB_WAS_ACTIVE=1 || true
 systemctl is-enabled --quiet smbd.service && SMB_WAS_ENABLED=1 || true
 
-if [ -e "$CONFIG_DIR" ]; then [ -d "$CONFIG_DIR" ] && [ ! -L "$CONFIG_DIR" ] || fail "$CONFIG_DIR ist kein echtes Verzeichnis."; fi
-if [ -e "$CONFIG_FILE" ]; then [ -f "$CONFIG_FILE" ] && [ ! -L "$CONFIG_FILE" ] || fail "$CONFIG_FILE ist keine reguläre Datei."; fi
+if [ -e "$CONFIG_DIR" ] || [ -L "$CONFIG_DIR" ]; then [ -d "$CONFIG_DIR" ] && [ ! -L "$CONFIG_DIR" ] || fail "$CONFIG_DIR ist kein echtes Verzeichnis."; fi
+if [ -e "$CONFIG_FILE" ] || [ -L "$CONFIG_FILE" ]; then [ -f "$CONFIG_FILE" ] && [ ! -L "$CONFIG_FILE" ] || fail "$CONFIG_FILE ist keine reguläre Datei."; fi
+if [ -e "$LEGACY_CONFIG_FILE" ] || [ -L "$LEGACY_CONFIG_FILE" ]; then [ -f "$LEGACY_CONFIG_FILE" ] && [ ! -L "$LEGACY_CONFIG_FILE" ] || fail "$LEGACY_CONFIG_FILE ist keine reguläre Datei."; fi
 if [ -e "$UNIT_FILE" ]; then [ -f "$UNIT_FILE" ] && [ ! -L "$UNIT_FILE" ] || fail "$UNIT_FILE ist keine reguläre Datei."; fi
 if [ "$SKIP_SAMBA" -eq 0 ] && [ -e "$SMB_INCLUDE" ]; then [ -f "$SMB_INCLUDE" ] && [ ! -L "$SMB_INCLUDE" ] || fail "$SMB_INCLUDE ist keine reguläre Datei."; fi
 
@@ -173,26 +192,53 @@ rollback() {
 }
 trap rollback EXIT HUP INT TERM
 
-PLANNED_CONFIG=$WORK_DIR/config.json
-if [ -f "$CONFIG_FILE" ] && [ "$RECONFIGURE" -eq 0 ]; then
-    php "$SCRIPT_DIR/configure.php" validate "$CONFIG_FILE"
-    cp -p -- "$CONFIG_FILE" "$PLANNED_CONFIG"
-    say "Vorhandene Konfiguration wird unverändert beibehalten."
-else
-    [ -t 0 ] || fail "Erst-/Neukonfiguration benötigt ein interaktives Terminal."
-    if [ -f "$CONFIG_FILE" ]; then
-        php "$SCRIPT_DIR/configure.php" interactive "$PLANNED_CONFIG" "$CONFIG_FILE"
-    else
-        php "$SCRIPT_DIR/configure.php" interactive "$PLANNED_CONFIG"
+STAGE=$WORK_DIR/app-stage
+mkdir "$STAGE"
+for item in composer.json composer.lock config.example.json config.example.toml bin src public installer clients; do
+    [ -e "$SOURCE_ROOT/$item" ] || fail "Anwendungsbestandteil fehlt: $item"
+    cp -R -- "$SOURCE_ROOT/$item" "$STAGE/$item"
+done
+for item in assets templates; do
+    [ ! -e "$SOURCE_ROOT/$item" ] || cp -R -- "$SOURCE_ROOT/$item" "$STAGE/$item"
+done
+(cd "$STAGE" && COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev --no-plugins --no-scripts --prefer-dist --no-interaction --no-progress --classmap-authoritative)
+run_configure() { /usr/bin/php "$STAGE/installer/configure.php" "$@"; }
+
+PLANNED_CONFIG=$WORK_DIR/config.toml
+EXISTING_CONFIG=$(select_existing_config)
+
+WRITE_INTERACTIVE=0
+if [ -n "$EXISTING_CONFIG" ]; then
+    run_configure validate "$EXISTING_CONFIG"
+    if [ "$RECONFIGURE" -eq 1 ]; then
+        [ -t 0 ] || fail "--reconfigure benötigt ein interaktives Terminal."
+        WRITE_INTERACTIVE=1
+    elif [ "$KEEP_CONFIG" -eq 0 ] && [ -t 0 ]; then
+        printf 'Vorhandene Einstellungen ändern (z. B. Nebenstellen/Arbeitsplätze)? [j/N]: ' >&2
+        IFS= read -r CHANGE_CONFIG || fail "Eingabe wurde abgebrochen."
+        case "$CHANGE_CONFIG" in j|J|ja|Ja|JA|y|Y|yes|Yes|YES) WRITE_INTERACTIVE=1 ;; esac
     fi
+    if [ "$WRITE_INTERACTIVE" -eq 1 ]; then
+        run_configure interactive "$PLANNED_CONFIG" "$EXISTING_CONFIG"
+    elif [ "$EXISTING_CONFIG" = "$CONFIG_FILE" ]; then
+        cp -p -- "$CONFIG_FILE" "$PLANNED_CONFIG"
+        say "Vorhandene TOML-Konfiguration wird bytegleich beibehalten."
+    else
+        run_configure migrate "$LEGACY_CONFIG_FILE" "$PLANNED_CONFIG"
+        say "Legacy-JSON wird nach TOML migriert; die JSON-Datei bleibt unverändert erhalten."
+    fi
+else
+    [ "$RECONFIGURE" -eq 0 ] || fail "--reconfigure benötigt eine vorhandene Konfiguration."
+    [ -t 0 ] || fail "Erstkonfiguration benötigt ein interaktives Terminal."
+    run_configure interactive "$PLANNED_CONFIG"
 fi
-php "$SCRIPT_DIR/configure.php" validate "$PLANNED_CONFIG"
+run_configure validate "$PLANNED_CONFIG"
 # A running managed instance may own this port during an update. Check again
 # after its normal update stop below; never stop a foreign listener for this test.
 if ! systemctl is-active --quiet kienzlefon-t2med.service; then
-    php "$SCRIPT_DIR/configure.php" check-listen "$PLANNED_CONFIG"
+    run_configure check-listen "$PLANNED_CONFIG"
 fi
-GDT_ROOT=$(php "$SCRIPT_DIR/configure.php" paths "$PLANNED_CONFIG" | sed -n '1p')
+GDT_ROOT=$(run_configure paths "$PLANNED_CONFIG" | sed -n '1p')
 [ -n "$GDT_ROOT" ] || fail "GDT-Root konnte nicht ermittelt werden."
 
 if [ -e "$GDT_ROOT" ]; then
@@ -212,12 +258,12 @@ if [ "$SKIP_SAMBA" -eq 0 ]; then
         }
         MAP_TO_GUEST=$(testparm -s --parameter-name='map to guest' "$SMB_MAIN" 2>/dev/null || true)
         SERVER_ROLE=$(testparm -s --parameter-name='server role' "$SMB_MAIN" 2>/dev/null || true)
-        php "$SCRIPT_DIR/samba.php" --main="$SMB_MAIN" --managed="$SMB_INCLUDE" --effective="$WORK_DIR/smb-effective.conf" --root="$GDT_ROOT" --include="$SMB_INCLUDE" --map="$MAP_TO_GUEST" --role="$SERVER_ROLE" --output="$SAMBA_PLAN"
+        /usr/bin/php "$STAGE/installer/samba.php" --main="$SMB_MAIN" --managed="$SMB_INCLUDE" --effective="$WORK_DIR/smb-effective.conf" --root="$GDT_ROOT" --include="$SMB_INCLUDE" --map="$MAP_TO_GUEST" --role="$SERVER_ROLE" --output="$SAMBA_PLAN"
     else
         SAMBA_FRESH=1
         printf '[global]\n' >"$WORK_DIR/empty-smb.conf"
         : >"$WORK_DIR/smb-effective.conf"
-        php "$SCRIPT_DIR/samba.php" --main="$WORK_DIR/empty-smb.conf" --effective="$WORK_DIR/smb-effective.conf" --root="$GDT_ROOT" --include="$SMB_INCLUDE" --map='' --role='' --fresh --output="$SAMBA_PLAN"
+        /usr/bin/php "$STAGE/installer/samba.php" --main="$WORK_DIR/empty-smb.conf" --effective="$WORK_DIR/smb-effective.conf" --root="$GDT_ROOT" --include="$SMB_INCLUDE" --map='' --role='' --fresh --output="$SAMBA_PLAN"
     fi
 else
     say "Samba wird ausgelassen. Verifizieren Sie extern Gast-Lese-, Schreib- und Löschzugriff auf kienzlefon-GDT."
@@ -234,18 +280,7 @@ fi
 command -v composer >/dev/null 2>&1 || fail "Composer wurde nicht bereitgestellt."
 if [ "$SKIP_SAMBA" -eq 0 ]; then command -v testparm >/dev/null 2>&1 || fail "testparm fehlt nach Samba-Installation."; fi
 
-STAGE=$WORK_DIR/app-stage
-mkdir "$STAGE"
-for item in composer.json composer.lock config.example.json bin src public installer clients; do
-    [ -e "$SOURCE_ROOT/$item" ] || fail "Anwendungsbestandteil fehlt: $item"
-    cp -R -- "$SOURCE_ROOT/$item" "$STAGE/$item"
-done
-for item in assets templates; do
-    [ ! -e "$SOURCE_ROOT/$item" ] || cp -R -- "$SOURCE_ROOT/$item" "$STAGE/$item"
-done
-(cd "$STAGE" && COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev --no-plugins --no-scripts --prefer-dist --no-interaction --no-progress --classmap-authoritative)
-
-php "$STAGE/bin/server.php" --config="$PLANNED_CONFIG" --check-config
+/usr/bin/php "$STAGE/bin/server.php" --config="$PLANNED_CONFIG" --check-config
 
 if getent group "$SERVICE_USER" >/dev/null 2>&1; then
     GROUP_MEMBERS=$(getent group "$SERVICE_USER" | cut -d: -f4)
@@ -266,7 +301,7 @@ if [ -d "$GDT_ROOT" ]; then
 else
     install -d -o "$SERVICE_USER" -g "$SERVICE_USER" -m 0770 "$GDT_ROOT"
 fi
-php "$SCRIPT_DIR/configure.php" paths "$PLANNED_CONFIG" | sed -n '2,$p' | while IFS= read -r directory; do
+run_configure paths "$PLANNED_CONFIG" | sed -n '2,$p' | while IFS= read -r directory; do
     target=$GDT_ROOT/$directory
     if [ -e "$target" ]; then
         [ ! -L "$target" ] && [ -d "$target" ] || fail "Clientpfad ist kein echtes Verzeichnis: $target"
@@ -283,7 +318,7 @@ if [ -e "$APP_DIR" ]; then
     [ -f "$APP_DIR/.kienzlefon-installed" ] || fail "Zielverzeichnis ist keine verwaltete Installation: $APP_DIR"
     if [ "$SERVICE_WAS_ACTIVE" -eq 1 ]; then SERVICE_TOUCHED=1; systemctl stop kienzlefon-t2med.service; fi
 fi
-php "$SCRIPT_DIR/configure.php" check-listen "$PLANNED_CONFIG"
+run_configure check-listen "$PLANNED_CONFIG"
 if [ "$APP_EXISTED" -eq 1 ]; then
     mv -- "$APP_DIR" "$APP_BACKUP"
     APP_TOUCHED=1

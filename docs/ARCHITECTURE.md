@@ -4,13 +4,14 @@ Zielsystem: Debian 12+, Ubuntu 24.04+ und Raspberry Pi OS Bookworm+ mit PHP 8.2 
 
 ## Laufzeit und Konfiguration
 
-`php bin/server.php --config=/etc/kienzlefon-t2med/config.json`; Demo: `php bin/server.php --demo --listen=127.0.0.1:8765`. Schema siehe `config.example.json`. Ein leeres APS-Passwort ist ein gültiger Wert. `aps.tls_verify=false` ist eine ausdrücklich konfigurierte Ausnahme für den vorhandenen Testserver. Der Installer bietet sie an; sie wird nie bei einem Fehler automatisch aktiviert. AMI und APS können auf verschiedenen Rechnern laufen.
+`php bin/server.php --config=/etc/kienzlefon-t2med/config.toml`; Demo: `php bin/server.php --demo --listen=127.0.0.1:8765`. Schema siehe `config.example.toml`. Ein leeres APS-Passwort ist ein gültiger Wert. `aps.tls_verify=false` ist eine ausdrücklich konfigurierte Ausnahme für den vorhandenen Testserver. Der Installer bietet sie an; sie wird nie bei einem Fehler automatisch aktiviert. AMI und APS können auf verschiedenen Rechnern laufen.
 
 ## HTTP-Vertrag
 
 Kein Benutzerlogin. Netzwerkbereich und erlaubte Hostnamen sind konfiguriert. Browser-POSTs brauchen denselben Origin und das Headerfeld `X-Kienzlefon-Token` aus `GET /api/v1/bootstrap`. Native lokale Clients holen ebenfalls dieses flüchtige Token; es ist ein Schutz gegen fremde Webseiten, kein Benutzerpasswort. Die Weboberfläche wird vom selben Dienst ausgeliefert. Keine CORS-Freigabe.
 
-- `GET /api/v1/bootstrap`: `token`, `clients` als Liste `{id,label,extension}`, `demo`.
+- `GET /api/v1/bootstrap`: `token`, `clients` als Liste `{id,label,extension}`, `demo`, `version`.
+- `GET /healthz`: `status`, `demo`, `version`. CLI-Version: `php bin/server.php --version`.
 - `GET /api/v1/telephony`: `generated_at`, `ami_connected`, `stale`, `calls`, `queues`, `extensions`, `outgoing`.
 - `POST /api/v1/lookup` mit `{number}`: `{lookup_id,number,status,patients}`. Patienten enthalten `patient_number`, `first_name`, `last_name`, `birth_date`, `address`; interne Referenzen bleiben für die Auswahlprüfung im Dienst.
 - `POST /api/v1/patient-open` mit `{client_id,lookup_id,patient_number,request_id}`: ausgewählten Kandidaten als GDT schreiben. Nur zum Lookup gehörende, eindeutig identifizierbare Patientennummern akzeptieren. Noch nicht konsumierte Datei nicht überschreiben. `request_id` ist eine UUID und dient der Wiederholungserkennung.
@@ -26,6 +27,13 @@ Status der Auflösung: `pending`, `resolved`, `ambiguous`, `not_found`, `timeout
 ## AMI und APS
 
 APS: `POST /aps/rest/praxis/patient/suche/find`, Basic Auth, JSON `{suchmaske: <Rufnummer>, ignoreSichtbarkeit: false}`. Antwort ist eine Liste mit `nummer`, `vorname`, `nachname`, `geburtsdatum`, `adresse` und vollständigem `ref`. Keine weiteren Stammdaten-Endpunkte voraussetzen.
+
+APS-Suchvarianten für den konfigurierten Ländercode: nationale führende Null,
+`+`-Format, `00`-Format und Landeskennzahl ohne Präfix. Alle verwenden denselben
+Cache-Schlüssel; Treffer über mehrere Schreibweisen werden per Patienten-ID und
+Referenz zusammengeführt. Kurze lokale Nummern werden nicht allein wegen der
+Ziffernfolge `49` international interpretiert (mindestens sieben weitere Ziffern).
+Die generische Normalisierung für die Wahl bleibt davon getrennt.
 
 AMI: `Events: on`; Snapshots `CoreShowChannels` und `QueueStatus` bei Verbindung sowie periodisch. Währenddessen Events puffern und anschließend auf den vollständigen Snapshot anwenden. Verbindungsausfall oder unvollständiger Snapshot bedeutet `stale`. Kanäle und logische Anrufe unterscheiden; Brücken und Local-Kanalpaare berücksichtigen, getrennte Gesprächsbrücken trotz gleichem Linkedid getrennt halten. Warteschlangeneinträge referenzieren die Anruf-ID. Gesprächsdauer nur bei beobachteter Verbindung, sonst unbekannt; Kanalalter gesondert.
 

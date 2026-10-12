@@ -17,7 +17,7 @@ const fixture = () => ({generated_at:new Date().toISOString(),ami_connected:true
       const req = route.request(), url = new URL(req.url());
       if (url.pathname.startsWith('/api/')) {
         if (req.method() === 'POST') state.posts.push({path:url.pathname,body:req.postDataJSON()});
-        if (url.pathname === '/api/v1/bootstrap') return route.fulfill({json:{token:'demo-token',demo:true,clients:[{id:'empfang-1',label:'Empfang',extension:'201'}]}});
+        if (url.pathname === '/api/v1/bootstrap') return route.fulfill({json:{token:'demo-token',demo:true,version:'1.3',clients:[{id:'empfang-1',label:'Empfang',extension:'201'}]}});
         if (url.pathname === '/api/v1/telephony') return state.offline ? route.abort() : route.fulfill({json:state.data});
         if (url.pathname === '/api/v1/lookup') return route.fulfill({json:state.lookup || {number:'0305550103',lookup_id:'search',status:'ambiguous',patients:fixture().calls[2].patients}});
         if (url.pathname === '/api/v1/patient-open') return route.fulfill({json:{message:'Demo: Akte geöffnet'}});
@@ -49,6 +49,27 @@ const fixture = () => ({generated_at:new Date().toISOString(),ami_connected:true
       await page.waitForFunction(() => !document.querySelector('#toast').hidden);
       assert.equal(state.posts.filter(p => p.path.endsWith('patient-open')).length,1);
       assert.equal(state.posts.at(-1).body.patient_number,90004);
+    });
+    await run('All calls stay expanded for this tab session, including reload and view changes',async ({page,state,go}) => {
+      state.data.calls.push(call('4','connected',[patient(90005,'Mia','Klein')],['202']),call('5','ringing',[],['203']));
+      await go(); const toggle=page.locator('#conversations-toggle'), list=page.locator('#compact-all-calls');
+      assert.match(await toggle.innerText(),/Alle Gespräche \(3\)/); assert.equal(await toggle.getAttribute('aria-expanded'),'false');
+      await toggle.click(); assert.deepEqual(await list.locator('.row-mark').allTextContents(),['202','203']);
+      assert.equal(await page.locator('#compact-own .compact-call').count(),1); assert.equal(await list.locator('.compact-call').count(),2);
+      await list.getByRole('button',{name:'Mia Klein',exact:true}).click(); await page.waitForFunction(() => !document.querySelector('#toast').hidden);
+      assert.equal(state.posts.at(-1).body.patient_number,90005);
+      await page.evaluate(() => poll()); assert.equal(await toggle.getAttribute('aria-expanded'),'true');
+      await page.getByRole('button',{name:'Übersicht ↗'}).click(); await page.getByRole('button',{name:'Kompaktansicht',exact:true}).click();
+      assert.equal(await toggle.getAttribute('aria-expanded'),'true');
+      await page.reload(); await page.waitForFunction(() => document.querySelector('#compact-counts').textContent.includes('2 warten'));
+      assert.equal(await toggle.getAttribute('aria-expanded'),'true'); assert.equal(await list.locator('.compact-call').count(),2);
+      state.data.calls=state.data.calls.filter(c=>c.id!=='4'); await page.evaluate(() => poll());
+      assert.equal(await list.locator('.compact-call').count(),1); assert.equal(await toggle.getAttribute('aria-expanded'),'true');
+      state.offline=true; await page.evaluate(() => poll()); assert.equal(await list.locator('.compact-call').count(),0); assert.match(await list.innerText(),/nicht verfügbar/);
+      state.offline=false; state.data.calls=[]; state.data.queues=[]; await page.evaluate(() => poll()); assert.match(await list.innerText(),/keine Gespräche/);
+      await toggle.click(); await page.reload(); await page.waitForFunction(() => document.querySelector('#compact-counts').textContent.includes('0 warten'));
+      assert.equal(await toggle.getAttribute('aria-expanded'),'false');
+      await page.locator('#menu-toggle').click(); assert.match(await page.locator('#app-version').innerText(),/Version 1\.3/);
     });
     await run('Polling retains keyboard focus and expanded details',async ({page,state,go}) => {
       await go(); const toggle = page.locator('#compact-waiting .compact-row .icon-button').first(); await toggle.click(); await toggle.focus();

@@ -28,10 +28,10 @@ final class HttpApi
             if ($method === 'GET' && $path === '/api/v1/bootstrap') {
                 $clients = [];
                 foreach ($this->runtime->config['clients'] as $id => $client) $clients[] = ['id'=>$id,'label'=>$client['label'],'extension'=>$client['extension']];
-                return self::json(['token'=>$this->token,'clients'=>$clients,'demo'=>$this->runtime->demo]);
+                return self::json(['token'=>$this->token,'clients'=>$clients,'demo'=>$this->runtime->demo,'version'=>Version::CURRENT]);
             }
             if ($method === 'GET' && $path === '/api/v1/telephony') return self::json($this->runtime->view());
-            if ($method === 'GET' && $path === '/healthz') return self::json(['status'=>'ok','demo'=>$this->runtime->demo]);
+            if ($method === 'GET' && $path === '/healthz') return self::json(['status'=>'ok','demo'=>$this->runtime->demo,'version'=>Version::CURRENT]);
             if ($method === 'POST') {
                 if (!hash_equals($this->token, $request->getHeaderLine('X-Kienzlefon-Token'))) return self::json(['error'=>'Sitzung abgelaufen. Seite neu laden.'], 403);
                 if (strtolower(trim(explode(';', $request->getHeaderLine('Content-Type'))[0])) !== 'application/json') return self::json(['error'=>'JSON erforderlich.'], 415);

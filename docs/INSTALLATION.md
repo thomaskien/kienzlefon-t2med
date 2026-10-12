@@ -17,7 +17,7 @@ sudo installer/install.sh
 
 Nach Bereitstellung fehlender PHP-/Composer-Pakete fragt der Installer APS-Host, Port, Benutzer, Passwort, TLS und die ausdrückliche TLS-Prüfausnahme ab. Ein leeres APS-Passwort ist gültig. Ebenso werden AMI-Host, Port, Benutzer, Secret und TLS, die öffentliche Middleware-URL samt unprivilegiertem Listen-Port ab 1024, der absolute GDT-Root und mindestens ein Client mit ID, Label, Nebenstelle und Verzeichnis erfasst. Secrets werden verdeckt gelesen und weder in Argumenten noch Logs ausgegeben.
 
-Die Anwendung landet root-owned unter `/opt/kienzlefon-t2med`, die Konfiguration unter `/etc/kienzlefon-t2med/config.json` mit `root:kienzlefon-t2med` und Modus `0640`. Der unprivilegierte systemd-Dienst schreibt nur in den konfigurierten GDT-Root und sein privates Runtime-Verzeichnis. Das Konfigurationsschema entspricht [config.example.json](../config.example.json).
+Die Anwendung landet root-owned unter `/opt/kienzlefon-t2med`, die Konfiguration unter `/etc/kienzlefon-t2med/config.toml` mit `root:kienzlefon-t2med` und Modus `0640`. Der unprivilegierte systemd-Dienst schreibt nur in den konfigurierten GDT-Root und sein privates Runtime-Verzeichnis. Das kommentierte Konfigurationsschema steht in [config.example.toml](../config.example.toml); `config.example.json` bleibt als Legacy-Referenz erhalten.
 
 Der Installer prüft die HTTP-Listenadresse vor den Anwendungs- und Samba-Änderungen.
 Beim Update einer laufenden Middleware erfolgt die Prüfung nach deren regulärem
@@ -34,13 +34,17 @@ ohne JIT-Speicherwarnung läuft. Die systemweite PHP-Konfiguration bleibt erhalt
 
 ## Update und Neukonfiguration
 
-Ein erneuter normaler Lauf aktualisiert Anwendung, Abhängigkeiten und Unit idempotent. Eine vorhandene Serverkonfiguration wird validiert, aber nicht überschrieben. Für bewusste Änderungen gilt:
+Ein erneuter normaler Lauf aktualisiert Anwendung, Abhängigkeiten und Unit idempotent. Im Terminal fragt er `Vorhandene Einstellungen ändern (z. B. Nebenstellen/Arbeitsplätze)? [j/N]`. Bei „Nein“ bleibt eine vorhandene TOML-Datei einschließlich Kommentaren bytegleich. Ohne Terminal werden vorhandene Werte ebenfalls ohne Nachfrage übernommen. `--keep-config` überspringt die Nachfrage ausdrücklich. Die Option kann nicht mit `--reconfigure` kombiniert werden.
+
+Eine Installation mit ausschließlich `/etc/kienzlefon-t2med/config.json` wird beim Update validiert und verlustfrei nach `config.toml` migriert. Die ursprüngliche JSON-Datei bleibt unverändert als Altbestand/Sicherung liegen. Sind beide Dateien vorhanden, hat TOML Vorrang; ungültiges TOML führt zu einem Fehler und wird nicht durch JSON verdeckt. Eine JSON-Datei kann weiterhin explizit mit `--config=...json` geladen werden.
+
+Für bewusste Änderungen gilt weiterhin:
 
 ```sh
 sudo installer/install.sh --reconfigure
 ```
 
-Bei der Neukonfiguration werden APS-Passwort und AMI-Secret getrennt behandelt: „beibehalten“ übernimmt den vorhandenen Wert; nach „nein“ setzt eine leere Eingabe den Wert ausdrücklich leer. Ein Fehlschlag stellt bekannte vorherige App-, Config-, Unit- und Samba-Dateien wieder her. Neu angelegte Paketinstallationen, der Dienstbenutzer und sichere leere GDT-Verzeichnisse werden nicht automatisch entfernt.
+Bei der Neukonfiguration werden APS-Passwort und AMI-Secret getrennt behandelt: „beibehalten“ übernimmt den vorhandenen Wert; nach „nein“ setzt eine leere Eingabe den Wert ausdrücklich leer. Vorhandene Arbeitsplätze werden mit Label, Nebenstelle und Verzeichnis angeboten und können geändert, entfernt oder ergänzt werden. Individuelle Netzwerk-, Queue-, Timeout- und GDT-Kennwerte bleiben erhalten. Ein Fehlschlag stellt bekannte vorherige App-, TOML-, Unit- und Samba-Dateien wieder her; nach einer fehlgeschlagenen Erst-Migration bleiben die alte JSON-Datei und ihre bisherige Unit nutzbar. Neu angelegte Paketinstallationen, der Dienstbenutzer und sichere leere GDT-Verzeichnisse werden nicht automatisch entfernt.
 
 ## Samba und GDT
 
@@ -92,7 +96,7 @@ systemctl status smbd.service
 testparm -s /etc/samba/smb.conf
 ```
 
-Der Dienst braucht keine PID-Datei. Nach Konfigurationsänderungen kann er mit `systemctl restart kienzlefon-t2med.service` neu gestartet werden. Die Web/API-Anwendung hat keine Benutzeranmeldung; Zugriffsschutz erfolgt deshalb durch LAN-Firewall, `allowed_hosts`, `allowed_networks`, Same-Origin-Prüfung und das flüchtige Bootstrap-Token. Die explizite Direktwahl-URL mit `sofort=1` startet nach aktiver Navigation im sichtbaren Browser einen Anruf ohne zusätzlichen Dialog; normale Wähl-URLs und Desktop-Handler verwenden die Bestätigung. Bloße HTTP-GETs führen keinen Anruf aus.
+Der Dienst braucht keine PID-Datei. Nach Konfigurationsänderungen kann er mit `systemctl restart kienzlefon-t2med.service` neu gestartet werden. Für eine reine Verbindungsprüfung dient `php bin/check-connections.php --config=/etc/kienzlefon-t2med/config.toml`. Die Web/API-Anwendung hat keine Benutzeranmeldung; Zugriffsschutz erfolgt deshalb durch LAN-Firewall, `allowed_hosts`, `allowed_networks`, Same-Origin-Prüfung und das flüchtige Bootstrap-Token. Die explizite Direktwahl-URL mit `sofort=1` startet nach aktiver Navigation im sichtbaren Browser einen Anruf ohne zusätzlichen Dialog; normale Wähl-URLs und Desktop-Handler verwenden die Bestätigung. Bloße HTTP-GETs führen keinen Anruf aus.
 
 ## Entwicklertests
 

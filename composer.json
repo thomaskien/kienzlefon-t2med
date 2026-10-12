@@ -5,12 +5,13 @@
   "require": {
     "php": ">=8.2",
     "ext-json": "*",
-    "ext-openssl": "*",
     "ext-mbstring": "*",
-    "react/http": "^1.11",
-    "react/socket": "^1.17",
+    "ext-openssl": "*",
+    "devium/toml": "^1.1",
     "react/event-loop": "^1.6",
-    "react/promise": "^3.3"
+    "react/http": "^1.11",
+    "react/promise": "^3.3",
+    "react/socket": "^1.17"
   },
   "autoload": {"psr-4": {"Kienzlefon\\": "src/"}},
   "scripts": {"test": "php tests/php/run.php"},

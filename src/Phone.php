@@ -19,9 +19,18 @@ final class Phone
     public static function variants(string $number, string $country = '49'): array
     {
         $n = self::normalize($number);
+        // Some trunks send the configured country code without +/00. Do not
+        // reinterpret short local numbers or extensions as international ones.
+        if (str_starts_with($n, $country) && strlen($n) >= strlen($country) + 7 && $n[strlen($country)] !== '0') $n = '+' . $n;
         $variants = [$n];
-        if (str_starts_with($n, '+' . $country)) $variants[] = '0' . substr($n, strlen($country) + 1);
-        elseif (str_starts_with($n, '0') && !str_starts_with($n, '00')) $variants[] = '+' . $country . substr($n, 1);
+        if (str_starts_with($n, '+' . $country)) {
+            $international = substr($n, 1);
+            return ['0' . substr($international, strlen($country)), '+' . $international, '00' . $international, $international];
+        }
+        if (str_starts_with($n, '0') && !str_starts_with($n, '00')) {
+            $international = $country . substr($n, 1);
+            return [$n, '+' . $international, '00' . $international, $international];
+        }
         foreach ($variants as $v) if (str_starts_with($v, '+')) $variants[] = '00' . substr($v, 1);
         return array_values(array_unique($variants));
     }

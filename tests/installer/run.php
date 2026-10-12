@@ -5,9 +5,11 @@ require dirname(__DIR__, 2) . '/installer/configure.php';
 require dirname(__DIR__, 2) . '/installer/samba.php';
 
 use Kienzlefon\Installer\ConfigurationError;
+use Kienzlefon\Config;
 use Kienzlefon\Installer\Samba\SambaConflict;
 use function Kienzlefon\Installer\buildConfig;
 use function Kienzlefon\Installer\validateConfig;
+use function Kienzlefon\Installer\writeToml;
 use function Kienzlefon\Installer\Samba\managedShare;
 use function Kienzlefon\Installer\Samba\plan;
 
@@ -107,6 +109,34 @@ check(array_keys($validated) === array_keys($example), 'erzeugtes Configschema h
 check(array_keys($validated['aps']) === array_keys($example['aps']), 'APS-Schema entspricht exakt dem Beispiel');
 check(array_keys($validated['ami']) === array_keys($example['ami']), 'AMI-Schema entspricht exakt dem Beispiel');
 
+$tomlExample = Config::load(dirname(__DIR__, 2) . '/config.example.toml');
+check($tomlExample === $validated, 'TOML- und Legacy-JSON-Beispiel sind wertgleich');
+
+$special = $validated;
+$special['ami']['secret'] = 'Raute #, "Anführung", Backslash \\ und Umlaut ä';
+$special['aps']['password'] = '';
+$special['telephony']['queues'] = [];
+$special['telephony']['extensions'] = ['007' => 'Empfang # "Nord"'];
+$special['clients'] = ['client_7' => ['label' => 'Empfang # "Nord"', 'extension' => '007', 'directory' => 'client_7']];
+$tempDirectory = sys_get_temp_dir() . '/kienzlefon-toml-' . bin2hex(random_bytes(8));
+mkdir($tempDirectory, 0700);
+$specialPath = $tempDirectory . '/config.toml';
+writeToml($specialPath, $special);
+check(Config::load($specialPath) === Config::validate($special), 'JSON -> TOML -> Config erhält Sonderzeichen, leere Arrays und Schlüssel verlustfrei');
+
+$badTomlPath = $tempDirectory . '/invalid.toml';
+$secretMarker = 'NICHT_AUSGEBEN_42';
+file_put_contents($badTomlPath, "[ami]\nsecret = \"{$secretMarker}\"\nsecret = \"doppelt\"\n");
+$badMessage = '';
+try { Config::read($badTomlPath); }
+catch (Throwable $e) { $badMessage = $e->getMessage(); }
+check($badMessage === 'Ungültige TOML-Konfiguration.' && !str_contains($badMessage, $secretMarker), 'Parserfehler und doppelte Keys geben weder Quelle noch Secret aus');
+
+ob_start();
+Config::validate($validated);
+$validationOutput = ob_get_clean();
+check($validationOutput === '', 'Validierung schreibt keinen Konfigurationsinhalt nach stdout');
+
 $bad = answers();
 $bad['clients'] = ['../escape' => ['label' => 'x', 'extension' => '201', 'directory' => '../x']];
 throws(fn() => buildConfig($bad), ConfigurationError::class, 'Pfad-/Clientinjektion wird abgewiesen');
@@ -130,9 +160,17 @@ $custom = $existingWithSecret;
 $custom['telephony']['queues'] = ['custom-queue'];
 $custom['telephony']['originate_context'] = 'custom-outgoing';
 $custom['http']['allowed_networks'] = ['10.20.0.0/16'];
+$custom['http']['listen'] = '127.0.0.1:8765';
 $updated = buildConfig($withoutSecrets, $custom);
-check($updated['telephony']['queues'] === ['custom-queue'] && $updated['telephony']['originate_context'] === 'custom-outgoing' && $updated['http']['allowed_networks'] === ['10.20.0.0/16'], 'Neukonfiguration erhält bestehende Routing- und Netzwerkeinstellungen');
+check($updated['telephony']['queues'] === ['custom-queue'] && $updated['telephony']['originate_context'] === 'custom-outgoing' && $updated['http']['allowed_networks'] === ['10.20.0.0/16'] && $updated['http']['listen'] === '127.0.0.1:8765', 'Neukonfiguration erhält bestehende Routing-, Binde- und Netzwerkeinstellungen');
+$changedClients = $withoutSecrets;
+$changedClients['clients'] = ['labor' => ['label' => 'Labor', 'extension' => '303', 'directory' => 'labor-gdt']];
+$withChangedClients = buildConfig($changedClients, $custom);
+check(!isset($withChangedClients['telephony']['extensions']['201']) && $withChangedClients['telephony']['extensions']['303'] === 'Labor', 'Arbeitsplätze können mit Nebenstelle und Verzeichnis ersetzt werden');
 $bad = answers(); $bad['aps_tls'] = false;
 throws(fn() => buildConfig($bad), ConfigurationError::class, 'Zertifikatsausnahme darf HTTPS nicht abschalten');
+unlink($specialPath);
+unlink($badTomlPath);
+rmdir($tempDirectory);
 printf("%d Prüfungen, %d Fehler\n", $tests, $failures);
 exit($failures === 0 ? 0 : 1);
