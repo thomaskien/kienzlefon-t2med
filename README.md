@@ -3,7 +3,7 @@
 Zentrale PHP-Middleware zwischen Asterisk und T2med: Anrufer erkennen, Warteschlangen und Gespräche im Browser anzeigen, Patientenakten über GDT öffnen und Rückrufe vom richtigen Arbeitsplatz starten.
 
 Aktuelle Version: **1.3.3** · [Änderungen](CHANGELOG.md). Die Version steht auch im
-Webmenü, unter `/healthz` und in `php bin/server.php --version`.
+Webmenü, unter `/healthz`, in `php bin/server.php --version` und direkt beim Start des Installers (auch bei `--dry-run` und `--help`).
 
 ## Funktionen
 

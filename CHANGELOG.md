@@ -2,6 +2,7 @@
 
 ## 1.3.3 – 12.10.2026
 
+- Installer zeigt beim Start die Programmversion aus der zentralen Versionsdatei an, auch bei `--dry-run` und `--help`.
 - Rein numerische Client-IDs wie `201` werden im Installer akzeptiert und von der Bootstrap-API immer als Zeichenkette geliefert. Arbeitsplatzwahl, Aktenaufruf und Telefonie-App behalten dadurch die korrekte Zuordnung; führende Nullen bleiben erhalten.
 
 ## 1.3.2 – 12.10.2026

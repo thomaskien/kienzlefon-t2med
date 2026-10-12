@@ -83,6 +83,12 @@ start_middleware() {
     fail "Dienst ist nach Installation nicht aktiv (Startfehler siehe oben)."
 }
 
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+SOURCE_ROOT=$(dirname "$SCRIPT_DIR")
+INSTALL_VERSION=$(sed -n "s/^[[:space:]]*public const CURRENT = '\([^']*\)';[[:space:]]*$/\1/p" "$SOURCE_ROOT/src/Version.php")
+[ -n "$INSTALL_VERSION" ] || fail "Programmversion aus src/Version.php konnte nicht gelesen werden."
+say "Kienzlefon-T2med Installer – Version $INSTALL_VERSION"
+
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --dry-run) DRY_RUN=1 ;;
@@ -96,9 +102,6 @@ while [ "$#" -gt 0 ]; do
 done
 
 [ "$RECONFIGURE" -eq 0 ] || [ "$KEEP_CONFIG" -eq 0 ] || fail "--reconfigure und --keep-config können nicht kombiniert werden."
-
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-SOURCE_ROOT=$(dirname "$SCRIPT_DIR")
 
 if [ "$DRY_RUN" -eq 1 ]; then
     say "Dry-run: keine Fragen; keine Dateien, Pakete, Benutzer oder Dienste werden verändert."
