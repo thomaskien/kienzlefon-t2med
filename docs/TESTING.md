@@ -21,6 +21,10 @@ Für 1.3.4 sind lokal alle 29 Clienttests erfolgreich, einschließlich eines ech
 
 Am 12.10.2026 wurde 1.3.4 zusätzlich auf dem lokalen Mac installiert: Signaturprüfung und Arbeitsplatzzuordnung per Bootstrap-GET erfolgreich; LaunchServices bestätigt `de.kienzlefon.t2med` als Standardhandler für `tel` und `callto`. Die URI-Verarbeitung wurde ohne Browserstart und ohne Telefonat per Dry-run geprüft.
 
+Für 1.3.5 sind lokal alle 35 Clienttests erfolgreich. Neue Prüfungen decken die Direktwahl für beide URI-Schemas ab: genau ein POST mit normalisierter Rufnummer, Arbeitsplatz und Token, keine Rückfrage, kein Browser und keine Erfolgsmeldung. Falsche Zuordnung und ungültige URI verhindern den POST; Fehler, ungewisse Ergebnisse und Demobetrieb bleiben sichtbar. Ein POST-Timeout führt zu keiner Wiederholung. HTTP-Antworten werden simuliert; es werden keine echten Anrufe ausgelöst.
+
+Die lokale Mac-App wurde auf 1.3.5 aktualisiert. Signatur, eingebetteter Direktaufruf, URI-Dry-run und die Zuordnung `mac` → `202` per Bootstrap-GET wurden geprüft. Ein echter Anruf wurde dabei nicht ausgelöst.
+
 Die Integrationstests starten simulierte AMI- und HTTPS-APS-Server ausschließlich auf Loopback sowie den echten PHP-Dienst mit temporärer Konfiguration. Es werden keine Praxisserver kontaktiert und keine echten Patientenakten geöffnet. Prüffälle:
 
 - APS-Basic-Auth mit leerem Passwort und `ignoreSichtbarkeit: false`.

@@ -114,8 +114,8 @@ cat >"$HANDLER_FILE" <<EOF
 [Desktop Entry]
 Type=Application
 Name=Kienzlefon T2med URL-Handler
-Comment=Wählbestätigung im Browser öffnen
-Exec="$Q_PYTHON" "$Q_HELPER" --open-browser --desktop-errors --config "$Q_CONFIG" -- %u
+Comment=Direkt über die zugeordnete Nebenstelle wählen
+Exec="$Q_PYTHON" "$Q_HELPER" --direct --desktop-errors --config "$Q_CONFIG" -- %u
 Terminal=false
 NoDisplay=true
 MimeType=x-scheme-handler/tel;x-scheme-handler/callto;

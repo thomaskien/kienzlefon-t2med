@@ -1,12 +1,10 @@
 # Desktop-Clients für `tel:` und `callto:`
 
-Die Desktop-Integration öffnet eine Wählbestätigung im normalen Browser. Sie führt selbst keinen Anruf aus und speichert keine APS-/AMI-Zugangsdaten. Vor jedem Browserstart fragt der Helper einmal `GET /api/v1/bootstrap` ab und prüft, ob Client-ID und Nebenstelle noch zusammengehören. Erst danach öffnet er:
+Seit 1.3.5 sendet ein Klick auf `tel:` oder `callto:` den Wählauftrag direkt an die Middleware: ohne Rückfrage, Browserfenster oder Erfolgsmeldung. Zuerst klingelt die zugeordnete Nebenstelle; nach dem Abheben wird die Zielnummer gewählt. Der Helper speichert keine APS-/AMI-Zugangsdaten.
 
-```text
-/waehlen?client_id=…&telefon=…&expected_extension=…&view=compact
-```
+Vor jedem Auftrag prüft der Helper mit `GET /api/v1/bootstrap`, ob Client-ID und Nebenstelle noch zusammengehören. Anschließend sendet er genau einen `POST /api/v1/calls` mit Bootstrap-Token, Rufnummer und einer neuen Vorgangs-ID. Fehler, ungewisse Ergebnisse und Demobetrieb werden angezeigt; der Helper wiederholt Aufträge nicht automatisch.
 
-Direktes Starten der installierten Anwendung öffnet nach derselben Prüfung die Kompaktübersicht. Der ältere, interaktiv bestätigte CLI-Direktmodus bleibt für bewusst manuell ausgeführte Befehle verfügbar; die Desktop-Registrierungen verwenden ihn nicht.
+Direktes Starten der installierten Anwendung öffnet nach derselben Zuordnungsprüfung die Kompaktübersicht. Die Protokollregistrierungen verwenden den Helper mit `--direct`. Für manuelle CLI-Aufrufe bleiben der interaktive Modus und die optionale Browser-Wählbestätigung mit `--open-browser` verfügbar.
 
 ## Voraussetzungen
 
@@ -37,7 +35,7 @@ clients/install-macos.sh --make-default \
   --url http://127.0.0.1:8765 --client-id empfang-1 --extension 201
 ```
 
-Der Installer erzeugt `~/Applications/Kienzlefon T2med.app`, registriert deren `tel`-/`callto`-URL-Schemas bei LaunchServices und speichert die Konfiguration in `~/Library/Application Support/KienzlefonT2med/client.json`. Ein Protokollklick öffnet ohne zusätzlichen Bestätigungsdialog direkt die Browser-Bestätigung; ein Doppelklick auf die App öffnet die Kompaktübersicht. Fehler erscheinen als macOS-Hinweis.
+Der Installer erzeugt `~/Applications/Kienzlefon T2med.app`, registriert deren `tel`-/`callto`-URL-Schemas bei LaunchServices und speichert die Konfiguration in `~/Library/Application Support/KienzlefonT2med/client.json`. Ein Protokollklick sendet den Wählauftrag direkt ohne Rückfrage oder Browserfenster; ein Doppelklick auf die App öffnet die Kompaktübersicht. Fehler erscheinen als macOS-Hinweis.
 
 Seit 1.3.4 wird eine von `osacompile` ausgelassene Bundle-ID angelegt. Nach dem Einfügen des Helpers und der URL-Schemas wird die App lokal neu signiert und die Signatur geprüft. Die Konfiguration wird erst nach erfolgreichem Aufbau und Registrierung der App gespeichert. Bei einem älteren Abbruch mit `CFBundleIdentifier ... Does Not Exist` das vollständige aktuelle Projekt herunterladen und den Installer erneut ausführen.
 
@@ -64,7 +62,7 @@ Der Installer verwendet `$XDG_DATA_HOME` und `$XDG_CONFIG_HOME`, ersatzweise `~/
 
 ## Aktualisierung und Prüfung
 
-Für ein Update denselben Installer mit den aktuellen Werten erneut ausführen. Vorab kann die geplante Installation ohne bleibende Änderungen geprüft werden:
+Für ein Update denselben Installer mit den aktuellen Werten erneut ausführen. Das ist auch beim Wechsel auf Direktwahl erforderlich; allein ein Middleware-Update ändert bereits installierte lokale Handler nicht. Für die Direktwahl ist kein Serverupdate erforderlich. Vorab kann die geplante Installation ohne bleibende Änderungen geprüft werden:
 
 ```sh
 clients/install-macos.sh --dry-run --url http://127.0.0.1:8765 --client-id empfang-1 --extension 201
@@ -82,7 +80,7 @@ Die macOS- und Windows-Konfigurationspfade stehen oben. Ein lokaler URI-Test ohn
 ```sh
 python3 clients/kienzlefon_call.py \
   --config ~/.config/kienzlefon-t2med/client.json \
-  --open-browser --dry-run 'tel:+493012345'
+  --direct --dry-run 'tel:+493012345'
 ```
 
-Akzeptiert werden nur Rufnummern mit 3 bis 20 Ziffern, optional führendem `+` und üblichen Trennzeichen. URI-Parameter, Fragmente, Steuerzeichen und andere Schemas werden abgewiesen. Die Browser-URL wird mit standardkonformer URL-Kodierung erzeugt.
+Akzeptiert werden nur Rufnummern mit 3 bis 20 Ziffern, optional führendem `+` und üblichen Trennzeichen. URI-Parameter, Fragmente, Steuerzeichen und andere Schemas werden abgewiesen.

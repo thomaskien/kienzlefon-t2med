@@ -75,7 +75,7 @@ Copy-Item -LiteralPath $sourceHelper -Destination $helper -Force
 & $pythonCommand.Source @pythonArgs $helper --write-config --config $config --url $Url --client-id $ClientId --extension $Extension
 if ($LASTEXITCODE -ne 0) { throw 'Konfiguration konnte nicht gespeichert werden.' }
 
-$commandValue = '"' + $pythonw + '" "' + $helper + '" --open-browser --desktop-errors --config "' + $config + '" -- "%1"'
+$commandValue = '"' + $pythonw + '" "' + $helper + '" --direct --desktop-errors --config "' + $config + '" -- "%1"'
 New-Item -Path $base -Force | Out-Null
 Set-Item -Path $base -Value 'Kienzlefon T2med'
 New-ItemProperty -Path $base -Name 'URL Protocol' -Value '' -PropertyType String -Force | Out-Null

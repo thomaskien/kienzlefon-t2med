@@ -9,6 +9,7 @@ import unittest
 from unittest import mock
 import urllib.error
 import urllib.parse
+import uuid
 from pathlib import Path
 
 
@@ -232,18 +233,107 @@ class HttpTests(unittest.TestCase):
 
 class MainModeTests(unittest.TestCase):
     def test_uri_cannot_override_registered_options(self):
-        args = kc.parse_args(['--open-browser', '--config', '/expected/client.json', '--', '--write-config'])
+        args = kc.parse_args(['--direct', '--config', '/expected/client.json', '--', '--write-config'])
         self.assertFalse(args.write_config)
         self.assertEqual(args.config, Path('/expected/client.json'))
         with self.assertRaises(kc.ClientError):
             kc.normalize_number(args.uri)
         with mock.patch('sys.stderr', io.StringIO()), self.assertRaises(SystemExit):
-            kc.parse_args(['--open-browser', '--', 'tel:03012345', '--config', '/other.json'])
+            kc.parse_args(['--direct', '--', 'tel:03012345', '--config', '/other.json'])
 
     def write_config(self, directory):
         path = Path(directory) / "client.json"
         kc.write_config(path, "https://phone.example", "empfang-1", "201")
         return path
+
+    def run_direct(self, directory, responses, uri="tel:%2B49%2030-12345", dry_run=False):
+        path = self.write_config(directory)
+        opener = FakeOpener(responses)
+        output, errors = io.StringIO(), io.StringIO()
+        with (
+            mock.patch.object(kc.urllib.request, "build_opener", return_value=opener),
+            mock.patch.object(kc, "confirm_call") as confirm,
+            mock.patch.object(kc.webbrowser, "open") as browser,
+            mock.patch.object(kc, "show_result") as success_dialog,
+            mock.patch.object(kc, "show_desktop_error") as error_dialog,
+            mock.patch("sys.stdout", output),
+            mock.patch("sys.stderr", errors),
+        ):
+            options = ["--dry-run"] if dry_run else []
+            result = kc.main(["--config", str(path), "--direct", "--desktop-errors", *options, "--", uri])
+        confirm.assert_not_called()
+        browser.assert_not_called()
+        success_dialog.assert_not_called()
+        return result, opener.requests, output.getvalue(), errors.getvalue(), error_dialog
+
+    def bootstrap(self, extension="201"):
+        return FakeResponse(200, {"token": "temporary", "clients": [{"id": "empfang-1", "extension": extension}]})
+
+    def test_direct_protocols_send_one_post_silently_without_confirmation_or_browser(self):
+        for scheme in ("tel", "callto"):
+            with self.subTest(scheme=scheme), tempfile.TemporaryDirectory() as directory:
+                result, requests, output, errors, error_dialog = self.run_direct(
+                    directory, [self.bootstrap(), FakeResponse(202, {"phase": "ringing_extension"})],
+                    uri=scheme + ":%2B49%2030-12345",
+                )
+                self.assertEqual(result, 0)
+                self.assertEqual(output + errors, "")
+                error_dialog.assert_not_called()
+                self.assertEqual([r.get_method() for r, _ in requests], ["GET", "POST"])
+                self.assertEqual(requests[0][0].full_url, "https://phone.example/api/v1/bootstrap")
+                post = requests[1][0]
+                self.assertEqual(post.full_url, "https://phone.example/api/v1/calls")
+                self.assertEqual(post.get_header("X-kienzlefon-token"), "temporary")
+                payload = json.loads(post.data)
+                self.assertEqual(payload["client_id"], "empfang-1")
+                self.assertEqual(payload["extension"], "201")
+                self.assertEqual(payload["number"], "+493012345")
+                self.assertEqual(uuid.UUID(payload["request_id"]).version, 4)
+
+    def test_direct_mapping_mismatch_prevents_post_and_shows_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result, requests, _, errors, error_dialog = self.run_direct(directory, [self.bootstrap("999")])
+            self.assertEqual(result, 1)
+            self.assertEqual([r.get_method() for r, _ in requests], ["GET"])
+            self.assertIn("Serverkonfiguration", errors)
+            error_dialog.assert_called_once()
+
+    def test_direct_invalid_uri_does_not_access_network(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result, requests, _, errors, error_dialog = self.run_direct(directory, [], uri="tel:123?extension=999")
+            self.assertEqual(result, 1)
+            self.assertEqual(requests, [])
+            self.assertIn("Parameter", errors)
+            error_dialog.assert_called_once()
+
+    def test_direct_unsuccessful_outcomes_remain_visible_without_retry(self):
+        for phase in ("unknown", "failed", "demo"):
+            with self.subTest(phase=phase), tempfile.TemporaryDirectory() as directory:
+                result, requests, output, errors, error_dialog = self.run_direct(
+                    directory, [self.bootstrap(), FakeResponse(202, {"phase": phase})],
+                )
+                self.assertEqual(result, 1)
+                self.assertEqual(len(requests), 2)
+                self.assertEqual(output, "")
+                self.assertTrue(errors)
+                error_dialog.assert_called_once()
+
+    def test_direct_post_timeout_is_not_retried(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result, requests, _, errors, error_dialog = self.run_direct(directory, [self.bootstrap(), TimeoutError("timeout")])
+            self.assertEqual(result, 1)
+            self.assertEqual(len(requests), 2)
+            self.assertIn("timeout", errors)
+            error_dialog.assert_called_once()
+
+    def test_direct_dry_run_has_no_external_io(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result, requests, output, errors, error_dialog = self.run_direct(directory, [], dry_run=True)
+            self.assertEqual(result, 0)
+            self.assertEqual(requests, [])
+            self.assertIn('"number": "+493012345"', output)
+            self.assertEqual(errors, "")
+            error_dialog.assert_not_called()
 
     def test_open_browser_dry_run_has_no_network_browser_call_or_confirmation(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -379,7 +469,7 @@ class InstallerTests(unittest.TestCase):
             handler = (xdg_data / "applications" / "kienzlefon-t2med-url.desktop").read_text(encoding="utf-8")
             self.assertIn("--open-monitor --desktop-errors --config", launcher)
             self.assertIn("NoDisplay=false", launcher)
-            self.assertIn("--open-browser --desktop-errors --config", handler)
+            self.assertIn("--direct --desktop-errors --config", handler)
             self.assertIn("Terminal=false", handler)
             self.assertNotIn("--confirmed", handler)
             # Decode both Desktop Entry string escapes and Exec argument quoting.
@@ -417,12 +507,14 @@ class InstallerTests(unittest.TestCase):
     def test_installers_encode_required_platform_behaviour(self):
         macos = (REPOSITORY / "clients" / "install-macos.sh").read_text(encoding="utf-8")
         windows = (REPOSITORY / "clients" / "install-windows.ps1").read_text(encoding="utf-8")
-        self.assertIn("--open-browser", macos)
+        self.assertIn("--direct -- ", macos)
+        self.assertNotIn("--open-browser", macos)
         self.assertIn("--open-monitor", macos)
         self.assertIn("quoted form of theURL", macos)
         self.assertNotIn("display dialog", macos)
         self.assertIn("pythonw.exe", windows)
-        self.assertIn("--open-browser --desktop-errors --config", windows)
+        self.assertIn("--direct --desktop-errors --config", windows)
+        self.assertNotIn("--open-browser", windows)
         self.assertIn("--open-monitor --desktop-errors --config", windows)
         self.assertNotIn("UserChoice", windows)
         self.assertIn("RegisteredApplications", windows)

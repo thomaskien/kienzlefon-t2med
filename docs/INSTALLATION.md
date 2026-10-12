@@ -75,9 +75,10 @@ Voraussetzung ist Python 3.9 oder neuer. Installation im Benutzerprofil, ohne
 Administratorrechte beziehungsweise `sudo`.
 
 Der lokale Helper speichert nur Middleware-URL, Client-ID und zugeordnete
-Nebenstelle. Vor dem Öffnen prüft er diese Zuordnung per GET am Server. Der
-Desktopaufruf öffnet die Wählbestätigung im Browser; den Anruf startet der dortige
-Button. APS-/AMI-Zugangsdaten bleiben auf dem Server. Die Windows-/macOS-Auswahl
+Nebenstelle. Vor dem Wählen prüft er diese Zuordnung per GET am Server. Ein
+`tel:`-/`callto:`-Klick sendet anschließend den Anrufauftrag direkt per POST,
+ohne Rückfrage oder Browserfenster. Nur Fehler werden angezeigt. Ein normaler
+App-Start öffnet die Kompaktübersicht. APS-/AMI-Zugangsdaten bleiben auf dem Server. Die Windows-/macOS-Auswahl
 der Standard-App erfolgt über das Betriebssystem.
 
 Ausführliche Anleitungen, Update und lesende Registrierungsprüfung:
@@ -102,7 +103,7 @@ systemctl status smbd.service
 testparm -s /etc/samba/smb.conf
 ```
 
-Der Dienst braucht keine PID-Datei. Nach Konfigurationsänderungen kann er mit `systemctl restart kienzlefon-t2med.service` neu gestartet werden. Für eine reine Verbindungsprüfung dient `php bin/check-connections.php --config=/etc/kienzlefon-t2med/config.toml`. Die Web/API-Anwendung hat keine Benutzeranmeldung; Zugriffsschutz erfolgt deshalb durch LAN-Firewall, `allowed_hosts`, `allowed_networks`, Same-Origin-Prüfung und das flüchtige Bootstrap-Token. Die explizite Direktwahl-URL mit `sofort=1` startet nach aktiver Navigation im sichtbaren Browser einen Anruf ohne zusätzlichen Dialog; normale Wähl-URLs und Desktop-Handler verwenden die Bestätigung. Bloße HTTP-GETs führen keinen Anruf aus.
+Der Dienst braucht keine PID-Datei. Nach Konfigurationsänderungen kann er mit `systemctl restart kienzlefon-t2med.service` neu gestartet werden. Für eine reine Verbindungsprüfung dient `php bin/check-connections.php --config=/etc/kienzlefon-t2med/config.toml`. Die Web/API-Anwendung hat keine Benutzeranmeldung; Zugriffsschutz erfolgt deshalb durch LAN-Firewall, `allowed_hosts`, `allowed_networks`, Same-Origin-Prüfung und das flüchtige Bootstrap-Token. Die explizite Direktwahl-URL mit `sofort=1` startet nach aktiver Navigation im sichtbaren Browser einen Anruf ohne zusätzlichen Dialog; normale Wähl-URLs verwenden die Bestätigung. Desktop-Handler senden seit 1.3.5 direkt per POST ohne Browser. Bloße HTTP-GETs führen keinen Anruf aus.
 
 ## Entwicklertests
 

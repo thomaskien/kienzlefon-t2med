@@ -326,6 +326,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true", help="validiert lokal und sendet keinen HTTP-Auftrag")
     parser.add_argument("--confirmed", action="store_true", help=argparse.SUPPRESS)
     mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--direct", action="store_true", help="sendet den Wählauftrag ohne Rückfrage, Browser oder Erfolgsmeldung")
     mode.add_argument("--open-browser", action="store_true", help="öffnet nach GET-Prüfung die Wählbestätigung im Browser")
     mode.add_argument("--open-monitor", action="store_true", help="öffnet nach GET-Prüfung die Kompaktübersicht im Browser")
     mode.add_argument("--check-registration", action="store_true", help="prüft die Client-Zuordnung nur per GET")
@@ -388,11 +389,18 @@ def main(argv: list[str] | None = None) -> int:
             print("Dry-run: kein HTTP-Auftrag und kein Telefonat; Serverzuordnung wurde nicht online geprüft.")
             print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
             return 0
-        if not args.confirmed:
+        if not (args.direct or args.confirmed):
             confirm_call(number)
         result = submit_call(config, number, timeout=args.timeout, request_id=payload["request_id"])
         response = result["response"]
-        server_id = response.get("request_id") or response.get("id") or payload["request_id"]
+        if args.direct:
+            if response.get("phase") == "unknown":
+                raise ClientError("Auftragsergebnis ungewiss. Bitte zuerst das Telefon prüfen; der Auftrag wird nicht automatisch wiederholt.")
+            if response.get("phase") == "failed":
+                raise ClientError("Der Wählauftrag ist fehlgeschlagen.")
+            if response.get("phase") == "demo":
+                raise ClientError("Middleware läuft im Demobetrieb: Kein Telefonat gestartet.")
+            return 0
         if response.get("phase") == "unknown":
             show_result("Auftragsergebnis ungewiss. Bitte zuerst das Telefon prüfen; der Auftrag wird nicht automatisch wiederholt.")
         elif response.get("phase") == "demo":

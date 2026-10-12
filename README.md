@@ -2,7 +2,7 @@
 
 Zentrale PHP-Middleware zwischen Asterisk und T2med: Anrufer erkennen, Warteschlangen und Gespräche im Browser anzeigen, Patientenakten über GDT öffnen und Rückrufe vom richtigen Arbeitsplatz starten.
 
-Aktuelle Version: **1.3.4** · [Änderungen](CHANGELOG.md). Die Version steht auch im
+Aktuelle Version: **1.3.5** · [Änderungen](CHANGELOG.md). Die Version steht auch im
 Webmenü, unter `/healthz`, in `php bin/server.php --version` und direkt beim Start des Installers (auch bei `--dry-run` und `--help`).
 
 ## Funktionen
@@ -12,7 +12,7 @@ Webmenü, unter `/healthz`, in `php bin/server.php --version` und direkt beim St
 - Asynchrone Patientensuche über den bestätigten APS-Suchendpunkt. Mehrere Patienten zu einer Rufnummer bleiben getrennt und werden zur Auswahl angeboten.
 - Namensauflösung für die Telefonanzeige über temporäre Kanalvariablen. Die Ein-Sekunden-Frist und die Übernahme in `CALLERID(name)` bleiben im Asterisk-Dialplan.
 - Patientenklick oder Weblink mit Rufnummer erzeugt eine ID-only-GDT im zugeordneten Arbeitsplatzverzeichnis.
-- Click-to-Dial: zuerst klingelt die eigene Nebenstelle, nach dem Abheben wird die Zielnummer gewählt. Registrierbare `tel:`-/`callto:`-Clients für Windows, macOS und Linux.
+- Click-to-Dial: zuerst klingelt die eigene Nebenstelle, nach dem Abheben wird die Zielnummer gewählt. Registrierbare `tel:`-/`callto:`-Clients für Windows, macOS und Linux wählen direkt ohne Rückfrage oder Browserfenster.
 - Direkt oder mit Rückfrage intern/extern vermitteln; kleiner Pfeil am eigenen verbundenen Gespräch. Voraussetzung: [Ergänzung im Telefonprojekt](docs/TRANSFER_HANDOFF.md).
 - Linux-Installer mit systemd, geschützter Zugangskonfiguration und additiver Guestfreigabe `kienzlefon-GDT`.
 

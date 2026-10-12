@@ -75,7 +75,7 @@ on invokeHelper(theURL)
     if theURL is "" then
         set commandText to commandText & " --open-monitor"
     else
-        set commandText to commandText & " --open-browser -- " & quoted form of theURL
+        set commandText to commandText & " --direct -- " & quoted form of theURL
     end if
     try
         do shell script commandText

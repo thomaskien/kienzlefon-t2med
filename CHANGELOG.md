@@ -1,5 +1,10 @@
 # Änderungen
 
+## 1.3.5 – 12.10.2026
+
+- `tel:`-/`callto:`-Handler für Windows, macOS und Linux senden den Wählauftrag direkt an die Middleware, ohne Rückfrage, Browserfenster oder Erfolgsmeldung. Vor dem Auftrag wird die Arbeitsplatzzuordnung geprüft; Fehler bleiben sichtbar, Aufträge werden nicht automatisch wiederholt.
+- Bestehende lokale Clients durch erneuten Aufruf ihres Installers aktualisieren. Ein normaler App-Start öffnet weiterhin die Kompaktübersicht.
+
 ## 1.3.4 – 12.10.2026
 
 - macOS-Installer erzeugt eine fehlende `CFBundleIdentifier` korrekt und signiert die fertige App einschließlich Protokollregistrierung und Python-Helper neu. Die Konfiguration wird erst nach erfolgreichem App-Aufbau und LaunchServices-Registrierung gespeichert.
