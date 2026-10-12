@@ -1,5 +1,9 @@
 # Änderungen
 
+## 1.3.3 – 12.10.2026
+
+- Rein numerische Client-IDs wie `201` werden im Installer akzeptiert und von der Bootstrap-API immer als Zeichenkette geliefert. Arbeitsplatzwahl, Aktenaufruf und Telefonie-App behalten dadurch die korrekte Zuordnung; führende Nullen bleiben erhalten.
+
 ## 1.3.2 – 12.10.2026
 
 - Click-to-Dial sendet die Zielrufnummer als Anzeigenamen an die Nebenstelle. Der feste Name „Rueckruf“ wird nicht mehr übertragen, damit er nicht als Name zur Zielnummer gespeichert werden kann. Bereits gespeicherte Telefonanzeigen werden dadurch nicht rückwirkend geändert.

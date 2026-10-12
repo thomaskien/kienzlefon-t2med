@@ -72,6 +72,17 @@ test('Unterschiedliche Brücken trotz gleichem Linkedid bleiben getrennt', funct
 test('Local-Kanalpaar verbindet zwei technische Brücken', function () { $s=new Telephony(config()['telephony']);$s->beginSync();$s->finishSync([channel('a','PJSIP/trunk-1','a','b1'),channel('b','Local/201@ring-0001;1','a','b1'),channel('c','Local/201@ring-0001;2','a','b2'),channel('d','PJSIP/201-4','a','b2')],[]);eq(count($s->view()['calls']),1); });
 test('Ausgehender Anruf nutzt externe ConnectedLine statt Praxisnummer', function () { $s=new Telephony(config()['telephony']);$s->beginSync();$s->finishSync([channel('a','PJSIP/201-1','a','bridge1','03055509999','03055508888'),channel('b','PJSIP/trunk-2','a','bridge1','03055509999')],[]);$c=$s->view()['calls'][0];eq($c['number'],'03055508888');eq($c['direction'],'outgoing');eq($c['state'],'connected');eq($c['duration_seconds'],null); });
 test('HTTP Origin, CSRF, Host und GET-Seiteneffekt', function () { $runtime=new Runtime(Config::validate(config()),true);$api=new HttpApi($runtime);$request=new ServerRequest('GET','http://localhost:8765/api/v1/bootstrap',[],'','1.1',['REMOTE_ADDR'=>'127.0.0.1']);eq($api($request)->getStatusCode(),200);eq($api($request->withUri(new React\Http\Message\Uri('http://evil.test/api/v1/bootstrap')))->getStatusCode(),403);eq($api($request->withHeader('Origin','https://evil.test'))->getStatusCode(),403);eq($api($request->withMethod('POST'))->getStatusCode(),403);$r=$api(new ServerRequest('GET','http://localhost:8765/patient-oeffnen?telefon=03055501111',[],'','1.1',['REMOTE_ADDR'=>'127.0.0.1']));eq($r->getStatusCode(),200); });
+test('Bootstrap liefert auch numerische Client-IDs als unveränderte Zeichenketten', function () {
+ $c=config();$c['clients']=[];$expected=[];
+ foreach(['201','0','001','1','pc-201'] as $id) {
+  $client=['label'=>'Arbeitsplatz '.$id,'extension'=>'201','directory'=>$id];
+  $c['clients'][$id]=$client;$expected[]=['id'=>$id,'label'=>$client['label'],'extension'=>'201'];
+ }
+ $api=new HttpApi(new Runtime(Config::validate($c),true));
+ $response=$api(new ServerRequest('GET','http://localhost:8765/api/v1/bootstrap',[],'','1.1',['REMOTE_ADDR'=>'127.0.0.1']));
+ eq($response->getStatusCode(),200);
+ eq(json_decode((string)$response->getBody(),true,64,JSON_THROW_ON_ERROR)['clients'],$expected);
+});
 test('APS-Nummernkollision mit führender Null verlangt Auswahl', fn()=>eq(Aps::classify([[patient(305551111)]],['0305551111'])['status'],'ambiguous'));
 test('Frühe Medienbrücke zählt nicht als verbunden', function () { $s=new Telephony(config()['telephony']); $s->beginSync();$a=channel('a','PJSIP/201-1','a','b');$b=channel('b','PJSIP/trunk-2','a','b');$b['ChannelStateDesc']='Ring';$s->finishSync([$a,$b],[]);eq($s->bridged('a','b'),false);eq($s->view()['calls'][0]['state'] === 'connected',false); });
 test('Beantworteter Local-Zwischenkanal allein bedeutet kein Patientengespräch', function () { $s=new Telephony(config()['telephony']);$s->beginSync();$s->finishSync([channel('a','PJSIP/201-1','a','b1'),channel('b','Local/out@route-01;1','a','b1'),channel('c','Local/out@route-01;2','a','b2'),channel('d','PJSIP/trunk-2','a')],[]);eq($s->view()['calls'][0]['state'] === 'connected',false); });

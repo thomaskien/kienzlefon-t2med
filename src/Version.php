@@ -4,5 +4,5 @@ namespace Kienzlefon;
 
 final class Version
 {
-    public const CURRENT = '1.3.2';
+    public const CURRENT = '1.3.3';
 }

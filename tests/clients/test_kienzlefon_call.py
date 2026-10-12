@@ -134,6 +134,22 @@ class HttpTests(unittest.TestCase):
             kc.submit_call(self.config, "12345", opener=opener)
         self.assertEqual(len(opener.requests), 1)
 
+    def test_numeric_client_registration_and_bootstrap_mapping(self):
+        for client_id in ['201', '0', '001', '1']:
+            with self.subTest(client_id=client_id), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / 'client.json'
+                kc.write_config(path, self.config['url'], client_id, '202')
+                config = kc.load_config(path)
+                self.assertEqual(config['client_id'], client_id)
+                opener = FakeOpener([
+                    FakeResponse(200, {'token': 'temporary', 'clients': [{'id': client_id, 'extension': '202'}]}),
+                    FakeResponse(202, {'status': 'accepted'}),
+                ])
+                kc.submit_call(config, '+4930123', opener=opener)
+                payload = json.loads(opener.requests[1][0].data)
+                self.assertEqual(payload['client_id'], client_id)
+                self.assertEqual(payload['extension'], '202')
+
     def test_http_errors_are_not_retried(self):
         error = urllib.error.HTTPError("https://phone.example/api/v1/bootstrap", 503, "down", {}, None)
         error.read = lambda _limit=4096: b"temporarily unavailable"

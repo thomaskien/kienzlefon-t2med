@@ -158,6 +158,36 @@ class TomlInstallerTests(unittest.TestCase):
             self.assertEqual(updated['aps']['password'], 'retained-aps')
             self.assertEqual(updated['ami']['secret'], 'retained-ami')
 
+    def test_interactive_numeric_client_creation_and_reconfiguration(self):
+        with tempfile.TemporaryDirectory(prefix='kf-numeric-') as temp:
+            existing = Path(temp) / 'existing.json'
+            target = Path(temp) / 'configured.toml'
+            config = json.loads((ROOT / 'config.example.json').read_text())
+            config['clients'] = {}
+            existing.write_text(json.dumps(config))
+            for id_to_add, expected in [('201', ['201']), ('001', ['201', '001'])]:
+                answers = [''] * 15  # Existing server settings and credentials.
+                if id_to_add == '001':
+                    answers += [''] * 4  # Retain the numeric client added above.
+                answers += [id_to_add, 'Arbeitsplatz ' + id_to_add, '201', '', '']
+                result = subprocess.run(
+                    [shutil.which('php'), str(CONFIGURE), 'interactive', str(target), str(existing)],
+                    input='\n'.join(answers) + '\n', capture_output=True, text=True,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                decoded = subprocess.run(
+                    [shutil.which('php'), '-r',
+                     'require $argv[1]; echo json_encode(Kienzlefon\\Config::load($argv[2]));',
+                     str(ROOT / 'vendor' / 'autoload.php'), str(target)],
+                    capture_output=True, text=True, check=True,
+                )
+                updated = json.loads(decoded.stdout)
+                self.assertEqual(list(updated['clients']), expected)
+                for client_id in expected:
+                    self.assertEqual(updated['clients'][client_id]['directory'], client_id)
+                existing = Path(temp) / 'existing.toml'
+                existing.write_bytes(target.read_bytes())
+
     def test_dry_run_and_keep_config_are_noninteractive(self):
         dry = subprocess.run(['bash', str(INSTALLER), '--dry-run'], input='',
                              capture_output=True, text=True)

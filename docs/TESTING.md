@@ -15,7 +15,7 @@ bash -n installer/install.sh clients/install-linux.sh clients/install-macos.sh
 bash installer/install.sh --dry-run
 ```
 
-Lokal geprüft für Version 1.3.1 am 12.10.2026: 45 PHP-Kerntests, 31 PHP-Installerprüfungen, 20 Python-Installerprüfungen, 27 Clienttests, 13 Integrationstests und 18 Browser-Szenarien. Ein zusätzlicher Linux-spezifischer Socket-Test wird auf macOS übersprungen. GitHub Actions wiederholt die Tests unter Linux mit PHP 8.2 und 8.4 sowie Chromium.
+Lokal geprüft für Version 1.3.3 am 12.10.2026: 46 PHP-Kerntests, 49 PHP-Installerprüfungen, 21 Python-Installerprüfungen, 28 Clienttests, 14 Integrationstests und 21 Browser-Szenarien. Ein zusätzlicher Linux-spezifischer Socket-Test wird auf macOS übersprungen. GitHub Actions wiederholt die Tests unter Linux mit PHP 8.2 und 8.4 sowie Chromium.
 
 Die Integrationstests starten simulierte AMI- und HTTPS-APS-Server ausschließlich auf Loopback sowie den echten PHP-Dienst mit temporärer Konfiguration. Es werden keine Praxisserver kontaktiert und keine echten Patientenakten geöffnet. Prüffälle:
 
@@ -31,6 +31,7 @@ Die Integrationstests starten simulierte AMI- und HTTPS-APS-Server ausschließli
 - AMI-Ausfall, veralteter Zustand, Wiederverbindung und Hangup während des Bestandsabgleichs.
 - Bestehende Samba-Konfiguration, Konflikte und idempotente Planung; vier Shell-Rollbacktests führen die tatsächliche Wiederherstellungsfunktion gegen temporäre Dateien aus.
 - TOML im laufenden Dienst; verlustfreie JSON-Migration mit Sonderzeichen und leeren Werten, generische Parserfehler ohne Secrets und Vorrang vorhandener TOML-Dateien.
+- Numerische Client-IDs (`201`, `0`, `001`, `1`): interaktive Einrichtung und spätere Änderung, TOML-Roundtrip, Bootstrap mit Zeichenketten, getrennte GDT-Ziele, korrekte AMI-Nebenstelle und Registrierung der Telefonie-App. JSON-Zahlwerte statt Zeichenketten, unbekannte IDs und unpassende Nebenstellen bleiben abgewiesen. Der Browser prüft Arbeitsplatzwahl, gespeicherte Auswahl, Aktenaufruf, Direktwahl und Neuladen.
 - Installer-Nachfrage im Terminal, Beibehalten einschließlich TOML-Kommentaren, `--keep-config`, Übernahme ohne Terminal sowie Änderung und Ergänzung vorhandener Arbeitsplätze. Fehlgeschlagene Erst-Migration stellt die bisherige JSON-Installation wieder her.
 
 Im Browser wurden mit der Demo Arbeitsplatzwahl, Namensauswahl, Mehrfachtreffer, Rufnummernsuche, Akten-Weblink und Rückrufdialog geprüft. Die Demo schreibt keine GDT-Dateien und startet kein Telefonat.

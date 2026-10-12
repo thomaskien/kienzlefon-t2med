@@ -147,6 +147,11 @@ class MiddlewareIntegration(unittest.TestCase):
         config['aps'].update(url=f'https://127.0.0.1:{cls.aps.server_port}', username='test', password='', tls_verify=False)
         config['gdt']['root'] = str(cls.share)
         config['clients']['empfang-2'] = {'label': 'Empfang 2', 'extension': '202', 'directory': 'empfang-2'}
+        cls.numeric_clients = {'201': '301', '0': '302', '001': '303', '1': '304'}
+        for client_id, extension in cls.numeric_clients.items():
+            (cls.share / client_id).mkdir()
+            config['clients'][client_id] = {'label': 'Arbeitsplatz ' + client_id, 'extension': extension, 'directory': client_id}
+            config['telephony']['extensions'][extension] = 'Arbeitsplatz ' + client_id
         path = root / 'config.toml'
         encoded = subprocess.run(['php', '-r', 'require "vendor/autoload.php"; echo Kienzlefon\\Config::encodeToml(json_decode(stream_get_contents(STDIN), true, 64, JSON_THROW_ON_ERROR));'], cwd=ROOT, input=json.dumps(config), text=True, capture_output=True, check=True)
         path.write_text(encoded.stdout)
@@ -198,6 +203,34 @@ class MiddlewareIntegration(unittest.TestCase):
         status, result = self.request('/api/v1/lookup', {'number': number})
         self.assertEqual(status, 200)
         return result
+
+    def test_12_numeric_client_ids_keep_workplace_mapping(self):
+        status, bootstrap = self.request('/api/v1/bootstrap')
+        self.assertEqual(status, 200)
+        self.assertTrue(all(isinstance(c['id'], str) for c in bootstrap['clients']))
+        clients = {c['id']: c['extension'] for c in bootstrap['clients']}
+        lookup = self.lookup('03055501022')
+        for client_id, extension in self.numeric_clients.items():
+            with self.subTest(client_id=client_id):
+                self.assertEqual(clients[client_id], extension)
+                request = {'client_id': client_id, 'lookup_id': lookup['lookup_id'], 'patient_number': 90001, 'request_id': str(uuid.uuid4())}
+                self.assertEqual(self.request('/api/v1/patient-open', request)[0], 200)
+                target = self.share / client_id / 'AUFRUFi.gdt'
+                self.assertEqual(list(self.share.rglob('*.gdt')), [target])
+                self.assertIn(b'014300090001\r\n', target.read_bytes())
+                target.unlink()
+                call = {'client_id': client_id, 'extension': extension, 'number': '03055508888', 'request_id': str(uuid.uuid4())}
+                self.assertEqual(self.request('/api/v1/calls', {**call, 'extension': '999'})[0], 400)
+                status, result = self.request('/api/v1/calls', call)
+                self.assertEqual(status, 202)
+                self.assertEqual(result['client_id'], client_id)
+                action = next(a for a in self.ami.actions if a.get('ChannelId') == 'kf-' + call['request_id'])
+                self.assertEqual(action['Channel'], 'PJSIP/' + extension)
+                self.ami.send({'Event': 'OriginateResponse', 'ActionID': action['ActionID'], 'Response': 'Failure'})
+        for invalid_id in [201, 0, True, None, [], {}, '999', '../201']:
+            self.assertEqual(self.request('/api/v1/patient-open', {**request, 'client_id': invalid_id, 'request_id': str(uuid.uuid4())})[0], 400)
+            self.assertEqual(self.request('/api/v1/calls', {**call, 'client_id': invalid_id, 'request_id': str(uuid.uuid4())})[0], 400)
+        self.assertEqual(list(self.share.rglob('*.gdt')), [])
 
     def test_01_aps_auth_empty_password_and_multiple_candidates(self):
         result = self.lookup('03055501022')
@@ -258,8 +291,8 @@ class MiddlewareIntegration(unittest.TestCase):
                 self.assertEqual(len(self.aps.requests), after_first)
 
     def test_02_version_is_available_without_patient_lookup(self):
-        self.assertEqual(self.request('/api/v1/bootstrap')[1]['version'], '1.3.2')
-        self.assertEqual(self.request('/healthz')[1]['version'], '1.3.2')
+        self.assertEqual(self.request('/api/v1/bootstrap')[1]['version'], '1.3.3')
+        self.assertEqual(self.request('/healthz')[1]['version'], '1.3.3')
 
     def test_03_http_controls_and_read_only_link(self):
         self.assertEqual(self.request('/api/v1/lookup', {'number': '03055501111'}, {'Origin': 'https://foreign.example'})[0], 403)

@@ -130,7 +130,9 @@ function buildConfig(array $answers, ?array $existing = null): array
     $extensions = [];
     $directories = [];
     foreach ($answers['clients'] as $id => $client) {
-        if (!is_string($id) || !preg_match('/^[a-z0-9][a-z0-9_-]{0,63}$/', $id) || !is_array($client)) {
+        // PHP stores canonical numeric string keys as integers, even after TOML/JSON decoding.
+        $id = (string)$id;
+        if (!preg_match('/^[a-z0-9][a-z0-9_-]{0,63}$/D', $id) || !is_array($client)) {
             throw new ConfigurationError('Ungültige Client-ID. Erlaubt sind Kleinbuchstaben, Ziffern, _ und -.');
         }
         $label = text($client['label'] ?? null, "Label für {$id}");

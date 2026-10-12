@@ -11,13 +11,13 @@ const fixture = () => ({generated_at:new Date().toISOString(),ami_connected:true
   const browser = await chromium.launch({headless:true, ...(process.env.UI_BROWSER_CHANNEL ? {channel:process.env.UI_BROWSER_CHANNEL} : {})}); let passed = 0;
   async function run(name,fn) {
     const context = await browser.newContext({viewport:{width:250,height:190},hasTouch:name.startsWith('Touch')}), page = await context.newPage();
-    const state = {data:fixture(),posts:[],offline:false,lookup:null,errors:[],transferDelay:0,transferFailures:0};
+    const state = {data:fixture(),clients:[{id:'empfang-1',label:'Empfang',extension:'201'},{id:'zimmer-2',label:'Zimmer',extension:'202'}],posts:[],offline:false,lookup:null,errors:[],transferDelay:0,transferFailures:0};
     page.on('pageerror',e => state.errors.push(String(e)));
     await page.route('http://kienzlefon.test/**',async route => {
       const req = route.request(), url = new URL(req.url());
       if (url.pathname.startsWith('/api/')) {
         if (req.method() === 'POST') state.posts.push({path:url.pathname,body:req.postDataJSON()});
-        if (url.pathname === '/api/v1/bootstrap') return route.fulfill({json:{token:'demo-token',demo:true,version:'1.3.2',clients:[{id:'empfang-1',label:'Empfang',extension:'201'},{id:'zimmer-2',label:'Zimmer',extension:'202'}]}});
+        if (url.pathname === '/api/v1/bootstrap') return route.fulfill({json:{token:'demo-token',demo:true,version:'1.3.3',clients:state.clients}});
         if (url.pathname === '/api/v1/telephony') return state.offline ? route.abort() : route.fulfill({json:state.data});
         if (url.pathname === '/api/v1/lookup') return route.fulfill({json:state.lookup || {number:'0305550103',lookup_id:'search',status:'ambiguous',patients:fixture().calls[2].patients}});
         if (url.pathname === '/api/v1/patient-open') return route.fulfill({json:{message:'Demo: Akte geöffnet'}});
@@ -42,6 +42,26 @@ const fixture = () => ({generated_at:new Date().toISOString(),ami_connected:true
     try { await fn({page,state,go,context}); assert.deepEqual(state.errors,[]); passed++; console.log('OK '+name); } finally { await context.close(); }
   }
   try {
+    for (const id of ['201','0','001']) await run(`Numeric client ${id}: selection, reload, GDT and dialing keep string ID`,async ({page,state,go}) => {
+      state.clients=[{id:'1',label:'Anderer Arbeitsplatz',extension:'202'},{id,label:'Numerischer Arbeitsplatz',extension:'201'}];
+      await go('/?view=compact&client_id='+id);
+      assert.equal(await page.locator('#client').inputValue(),id);
+      assert.equal(await page.locator('#compact-own .compact-name-text').innerText(),'Mara Berger');
+      await go('/?view=compact');
+      assert.equal(await page.locator('#client').inputValue(),id);
+      await page.locator('#compact-own .compact-name').click();
+      await page.waitForFunction(() => !document.querySelector('#toast').hidden);
+      assert.equal(state.posts.at(-1).path,'/api/v1/patient-open');
+      assert.equal(state.posts.at(-1).body.client_id,id);
+      await go('/waehlen?client_id='+id+'&telefon=03012345&expected_extension=201&sofort=1');
+      await page.waitForFunction(() => !document.querySelector('#toast').hidden);
+      assert.equal(state.posts.at(-1).path,'/api/v1/calls');
+      assert.equal(state.posts.at(-1).body.client_id,id);
+      assert.equal(state.posts.at(-1).body.extension,'201');
+      await page.reload(); await page.waitForFunction(() => document.querySelector('#compact-counts').textContent.includes('2 warten'));
+      assert.equal(await page.locator('#client').inputValue(),id);
+      assert.equal(state.posts.filter(p=>p.path==='/api/v1/calls').length,1);
+    });
     await run('250 × 190: separate conversations and queue, own call, demo and footer fit',async ({page,go}) => {
       await go(); assert.equal(await page.locator('#compact-own .compact-name-text').innerText(),'Mara Berger');
       assert.equal(await page.locator('#compact-own .compact-dob').innerText(),'02.01.1980');

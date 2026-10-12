@@ -27,7 +27,7 @@ final class HttpApi
             $method = $request->getMethod(); $path = $request->getUri()->getPath();
             if ($method === 'GET' && $path === '/api/v1/bootstrap') {
                 $clients = [];
-                foreach ($this->runtime->config['clients'] as $id => $client) $clients[] = ['id'=>$id,'label'=>$client['label'],'extension'=>$client['extension']];
+                foreach ($this->runtime->config['clients'] as $id => $client) $clients[] = ['id'=>(string)$id,'label'=>$client['label'],'extension'=>$client['extension']];
                 return self::json(['token'=>$this->token,'clients'=>$clients,'demo'=>$this->runtime->demo,'version'=>Version::CURRENT]);
             }
             if ($method === 'GET' && $path === '/api/v1/telephony') return self::json($this->runtime->view());

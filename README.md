@@ -2,7 +2,7 @@
 
 Zentrale PHP-Middleware zwischen Asterisk und T2med: Anrufer erkennen, Warteschlangen und Gespräche im Browser anzeigen, Patientenakten über GDT öffnen und Rückrufe vom richtigen Arbeitsplatz starten.
 
-Aktuelle Version: **1.3.2** · [Änderungen](CHANGELOG.md). Die Version steht auch im
+Aktuelle Version: **1.3.3** · [Änderungen](CHANGELOG.md). Die Version steht auch im
 Webmenü, unter `/healthz` und in `php bin/server.php --version`.
 
 ## Funktionen
@@ -60,6 +60,8 @@ Dann `http://127.0.0.1:8765/` öffnen. Die Demo verwendet ausschließlich fiktiv
 - [Architektur, Konfiguration und HTTP-API](docs/ARCHITECTURE.md)
 - [AMI- und Dialplan-Vertrag für den kienzlefon-Installer](docs/AMI_DIALPLAN.md)
 - [Tests und Abnahme](docs/TESTING.md)
+
+Client-IDs dürfen auch rein numerisch sein, z. B. `201`. Führende Nullen bleiben erhalten: `001` und `1` sind unterschiedliche Arbeitsplätze. In API-Anfragen ist `client_id` immer eine Zeichenkette, z. B. `"201"`.
 
 Einbettbarer Aktenlink, mit URL-kodierter Telefonnummer und registrierter Client-ID:
 

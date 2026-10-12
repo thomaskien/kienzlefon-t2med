@@ -124,6 +124,29 @@ $specialPath = $tempDirectory . '/config.toml';
 writeToml($specialPath, $special);
 check(Config::load($specialPath) === Config::validate($special), 'JSON -> TOML -> Config erhält Sonderzeichen, leere Arrays und Schlüssel verlustfrei');
 
+foreach ([['201'], ['0'], ['0', '1'], ['201', '001', '1', '0', 'pc-201']] as $ids) {
+    $numeric = answers();
+    $numeric['clients'] = [];
+    foreach ($ids as $id) {
+        $numeric['clients'][$id] = ['label' => 'Arbeitsplatz ' . $id, 'extension' => '201', 'directory' => $id];
+    }
+    try {
+        $built = buildConfig($numeric);
+        check($built['clients'] === $numeric['clients'], 'Installer erhält Client-IDs: ' . implode(', ', $ids));
+        writeToml($specialPath, $built);
+        $loaded = Config::load($specialPath);
+        check($loaded === $built, 'Numerische Client-IDs überstehen TOML-Roundtrip verlustfrei');
+        check(buildConfig($numeric, $loaded) === $built, 'Neukonfiguration erhält numerische Client-IDs');
+    } catch (Throwable $e) {
+        check(false, 'Numerische Client-IDs werden akzeptiert: ' . implode(', ', $ids) . ' (' . $e->getMessage() . ')');
+    }
+}
+foreach (['-1', '+201', '2.01', '201/../../x', "201\n", str_repeat('2', 65)] as $id) {
+    $invalidId = answers();
+    $invalidId['clients'] = [$id => ['label' => 'Test', 'extension' => '201', 'directory' => 'test']];
+    throws(fn() => buildConfig($invalidId), ConfigurationError::class, 'Ungültige Client-ID bleibt gesperrt: ' . json_encode($id));
+}
+
 $badTomlPath = $tempDirectory . '/invalid.toml';
 $secretMarker = 'NICHT_AUSGEBEN_42';
 file_put_contents($badTomlPath, "[ami]\nsecret = \"{$secretMarker}\"\nsecret = \"doppelt\"\n");
