@@ -1,135 +1,73 @@
 # Oberfläche und Weblinks
 
-[← Projektübersicht und Demovideo](../README.md) · [Installation](INSTALLATION.md) · [Desktop-Clients](CLIENTS.md)
+[← Projektübersicht](../README.md) · [Installation](INSTALLATION.md) · [FHIR](FHIR.md) · [Desktop-Clients](CLIENTS.md)
 
-## Vollständige Übersicht
+## Übersicht und Patientensuche
 
-Die vollständige Ansicht zeigt Warteschlangen, laufende Gespräche und den Status der Nebenstellen. Oben den eigenen Arbeitsplatz auswählen: Er bestimmt, welche Nebenstelle für Wahlaufträge verwendet wird und in welches Verzeichnis ein Aktenaufruf gelangt. **Kompaktansicht** wechselt zur kleinen Arbeitsplatzansicht.
+Oben den eigenen Arbeitsplatz wählen. Er bestimmt die Nebenstelle für Wahlaufträge und das GDT-Verzeichnis für Aktenaufrufe. Die vollständige Ansicht zeigt Warteschlangen, Gespräche und Nebenstellen.
 
-![Telefonieübersicht mit Arbeitsplatzwahl, Rufnummernsuche, Warteschlange und Nebenstellenstatus](images/telefonieuebersicht.png)
+![Telefonieübersicht](images/telefonieuebersicht.png)
 
-*Die Screenshots zeigen einen früheren Oberflächenstand; hier ist Version 1.3.3 abgebildet. Die nachfolgende Bedienung beschreibt Version 1.3.6.*
+Das Suchfeld findet Namen, Namensbestandteile, exakte Patientennummern und Telefonnummern. `Müller Anna`, `Anna Müller` und `Mueller Anna` finden dieselben Namen. Rein numerische Eingaben suchen nach Patientennummer und Telefon. Mehrere Treffer bleiben getrennt; fehlt die echte Patientennummer, ist der Aktenaufruf gesperrt. Bei mehr als 200 Namenstreffern den Suchtext präzisieren.
 
-## Kompaktansicht
+Ein Patientenklick schreibt die GDT-Datei für den gewählten Arbeitsplatz. **Anrufen** ist nur für eine Telefonnummer bestimmt; ein Name löst keinen Wahlauftrag aus. Die FHIR-Verknüpfung zeigt Zeitpunkt und Ergebnis des letzten Imports.
 
-Standard ist die kompakte Ansicht; die letzte Ansicht wird pro Browser gespeichert.
-Ein direkter Einstieg ist `/?view=compact&client_id=empfang-1`. Für die vollständige
-Übersicht `/?view=full&client_id=empfang-1` verwenden oder unten „Übersicht“ wählen.
+Bei der Wahlhilfe erhält das Telefon nur bei eindeutiger Rufnummernzuordnung den echten Patientennamen. Bei keinem oder mehreren Patienten bleibt der Name leer; die UI bietet mehrdeutige Patienten weiterhin zur Auswahl an.
 
-![Kompaktansicht mit eigenen Gesprächen, Warteschlange und aufgeklappten Patientendetails](images/kompaktansicht.jpg)
+## Kompaktansicht und Nebenstellen
 
-*Der Rückrufknopf in diesem älteren Screenshot ist seit 1.3.6 aus den Details laufender Anrufe entfernt. Die aktuelle Ansicht zeigt außerdem Version und Autor im Footer.*
+Standard ist die Kompaktansicht. Direkte Einstiege sind `/?view=compact&client_id=empfang-1` und `/?view=full&client_id=empfang-1`; ohne Parameter gilt die zuletzt gespeicherte Ansicht.
 
-Die Kopfzeile zeigt eigene Nebenstelle, Wartende, verbundene Gespräche und
-Verbindungsstatus. DEMO bleibt erkennbar. Die Bereiche **Gespräche** und
-**Warteschlange** haben getrennte Überschriften. Eigene Verbindungen stehen vor der
-Warteliste. Wartende erscheinen pro Queue in der gemeldeten Position; bei mehreren
-belegten Queues kennzeichnet eine Überschrift deren getrennte Reihenfolge. Die
-Warteliste scrollt unabhängig, während eigene Verbindung und Fußzeile erreichbar
-bleiben. **Alle Gespräche** in der Fußzeile klappt die Verbindungen aller
-Nebenstellen einschließlich der eigenen auf. Die Liste zeigt Nebenstelle, Name
-bzw. Rufnummer und Dauer; Details und Aktenaufruf bleiben verfügbar. Diese Wahl
-bleibt während der Tab-Sitzung gespeichert, auch bei Polling, Ansichtswechsel und
-Neuladen. Der Schalter heißt dann **Eigene Gespräche** und schaltet zurück auf die
-Verbindungen des eigenen Arbeitsplatzes. Nebenstellen haben einen getrennten
-Schalter. Bei Verbindungsverlust werden auch hier keine alten Gespräche angezeigt.
+![Kompaktansicht](images/kompaktansicht.jpg)
 
-Bei genau einem Patiententreffer steht das Geburtsdatum ungefettet direkt hinter dem Namen. Bei mehreren Treffern erscheinen die Geburtsdaten erst in der Kandidatenauswahl.
+Eigene Gespräche stehen vor den Wartenden. **Alle Gespräche** blendet andere Nebenstellen ein, **Eigene Gespräche** schaltet zurück. Details zeigen Rufnummer und Patientennummer, im APS-Altbetrieb gegebenenfalls auch Geburtsdatum und Adresse; bei mehreren Patienten erfolgt dort die Auswahl. Veraltete Telefoniedaten werden nicht als aktueller Zustand weitergezeigt.
 
-Die installierte Version und „Dr. Thomas Kienzle“ als Autor stehen im Footer beider Ansichten. Die Version steht zusätzlich im Menü unter den Einstellungen.
+Die konfigurierten Nebenstellen erscheinen als **FREI** (grün), **klingelt** (gelb) und **BELEGT** (rot). Ein Klick auf eine andere Nebenstelle startet ohne zusätzlichen Dialog einen internen Wahlauftrag über den ausgewählten eigenen Arbeitsplatz: zuerst das eigene Telefon abheben, danach klingelt das Ziel.
 
-Bei eindeutigem Treffer öffnet ein Klick auf den Patientennamen dessen Akte. Der
-kleine Abwärtspfeil klappt Rufnummer, Geburtsdatum, Patientennummer und Adresse
-auf. Mehrfachtreffer zeigen zunächst Rufnummer und Trefferzahl. Erst die Auswahl
-eines konkreten Patienten erzeugt die GDT-Datei. Unterdrückte/unbekannte Rufnummern
-bleiben ohne erzwungene Zuordnung sichtbar.
+Der Nebenstellenaufruf ist bei veralteten Daten, für die eigene Nebenstelle oder bei beschäftigtem eigenen Anschluss gesperrt. Er ist kein Vermitteln eines laufenden Gesprächs.
 
-Bei Mausbedienung passen ein eigenes Gespräch und zwei Wartende in ungefähr
-250 × 210 Pixel Inhaltsfläche einschließlich der Bereichsüberschriften und des Footers. Touchgeräte erhalten größere Bedienelemente;
-Browserleisten kommen zu den Maßen hinzu. Menü, Details und lange Listen brauchen
-zusätzlichen Platz. Über das Menü kann ein eigenes Kompaktfenster geöffnet werden;
-dessen endgültige Größe und Position verwaltet der Browser. Es wird beim Polling
-nicht automatisch nach vorne geholt.
-
-Im Menü: Arbeitsplatzwechsel, Rufnummernsuche, Wählen, Rückrufaufträge und die
-Einrichtung der Desktop-Telefonie-App. Die Rückrufaufträge sind die vorhandene
-flüchtige Diensthistorie, keine dauerhafte Anrufliste.
+Die untere Zeile der Kompaktansicht lautet **kienzlefon v1.4.3 von Dr. Thomas Kienzle**. Auch die vollständige Ansicht zeigt Version und Autor. Das Menü enthält Arbeitsplatzwechsel, Patientensuche, Wählen, Rückrufaufträge und die Einrichtung der Desktop-Telefonie-App.
 
 ## Rückrufaufträge
 
-Das Menü öffnen; dort stehen die vorhandenen Aufträge im Bereich **Rückrufaufträge**. Die Liste zeigt die vom Dienst erfassten Wahlaufträge; sie ist keine Liste aller verpassten Anrufe und wird nach einem Dienstneustart nicht wiederhergestellt.
+Die Liste enthält Wahlaufträge des ausgewählten Arbeitsplatzes, keine dauerhafte Anrufliste, und wird nach einem Dienstneustart nicht wiederhergestellt.
 
-Bei den Rückrufaufträgen stehen folgende Aktionen für den ausgewählten Arbeitsplatz zur Verfügung:
+- **Nochmal versuchen** startet nach einem bewussten Klick denselben Zielruf neu, sofern der alte Auftrag abgeschlossen, der Zustand aktuell und die eigene Nebenstelle frei ist.
+- **Löschen** blendet einen Eintrag aus, beendet aber keinen Anruf.
+- **Liste bereinigen** entfernt nur erledigte Einträge dieses Arbeitsplatzes.
 
-- **Nochmal versuchen** startet mit einem bewussten Klick einen neuen Auftrag an dieselbe Nummer und Nebenstelle. Es erscheint keine zusätzliche Rückfrage. Die Aktion ist bei laufenden/ungewissen Aufträgen, belegter Nebenstelle oder veralteten Telefoniedaten gesperrt. Weitere Wiederholungen erfolgen vom neuen Eintrag aus.
-- **Löschen** entfernt den Eintrag aus der Liste, auch wenn der Anruf noch läuft. Es beendet keinen Anruf. Intern bleibt die Zuordnung für Statusverfolgung und Doppelanrufschutz erhalten.
-- **Liste bereinigen** entfernt alle erledigten Einträge dieses Arbeitsplatzes. Laufende, ungewisse und fremde Aufträge bleiben erhalten.
-
-Abgeschlossene Aufträge werden nach zehn Minuten automatisch entfernt. Ein erfolgreicher AMI-Bestandsabgleich erkennt außerdem verwaiste Aufträge, etwa nach einer ausgebliebenen Hangup-Meldung. Während der anfänglichen Rufzeit und bei veralteten Daten erfolgt kein voreiliger Abschluss. In den Details laufender Anrufe gibt es keinen Rückrufknopf mehr.
+Die Wahlhilfe überträgt weder `Rueckruf`/`Rückruf` noch den Nummerntext als Namen. Zuerst klingelt immer die eigene Nebenstelle; erst nach dem Abheben wird das Ziel gewählt. Ungewisse Aufträge werden nicht automatisch wiederholt.
 
 ## Vermitteln
 
-Die Kompaktansicht zeigt keinen separaten Bereich „Vermittlung“. Über **Übersicht** sind Verlauf und Steuerung einer laufenden Rückfrage weiterhin erreichbar.
+Der Pfeil **↪** am eigenen verbundenen Gespräch öffnet die Zielauswahl für eine andere Nebenstelle oder externe Rufnummer. **Direkt vermitteln** übergibt sofort; **Rückfrage starten** ruft zunächst das Ziel an. In der vollständigen Ansicht die Rückfrage anschließend **Abschließen** oder **Zurück zum Anrufer** wählen.
 
-Ein kleiner seitlicher Pfeil am eigenen verbundenen Gespräch öffnet die Vermittlung. Eine andere Nebenstelle auswählen oder eine externe Rufnummer eingeben, danach **Direkt vermitteln** oder **Rückfrage starten** wählen. Das Öffnen des Dialogs allein verändert das Gespräch nicht. Fremde Gespräche und wartende Anrufe erhalten keine Vermittlungsaktion.
+Fremde Gespräche, Wartende, veraltete Daten und ein Arbeitsplatzwechsel sperren die Aktion. Voraussetzung ist die [Telefonprojekt-Einrichtung](TRANSFER_HANDOFF.md); eine bestätigte AMI-Annahme ist noch keine bestätigte Gesprächsverbindung.
 
-![Vermittlungsdialog: internes oder externes Ziel auswählen und direkt oder mit Rückfrage vermitteln](images/vermittlung.jpg)
-
-Bei einer Rückfrage zeigt die Oberfläche den Verlauf auch dann weiter, wenn sich die Gesprächszeilen ändern. **Abschließen** wird erst nach bestätigter Verbindung mit dem tatsächlichen Ziel freigegeben; **Zurück zum Anrufer** bricht die Rückfrage ab. Asterisk muss den jeweiligen Ausgang bestätigen. Bei unbekanntem Ergebnis am Telefon prüfen; es wird kein Auftrag automatisch wiederholt. Arbeitsplatzwechsel, beendete Gespräche und veraltete Telefoniedaten sperren einen offenen Startdialog.
-
-Voraussetzung ist die ergänzte [Telefonprojekt-Einrichtung](TRANSFER_HANDOFF.md). Die lokalen Simulationstests prüfen die Bedienung, ein echter Transfer mit dem angepassten Asterisk ist noch separat zu testen.
+![Vermittlungsdialog](images/vermittlung.jpg)
 
 ## Status im Fenstertitel
 
-Der Titel lautet beispielsweise `2 warten · 1 Gespräch · kienzlefon`. Bei
-Verbindungsverlust wechseln Titel und Monitor auf einen Fehlerstatus; alte Anrufe
-und Zähler werden nicht als aktuell weiter angezeigt. Die Daten werden sichtbar
-alle zwei Sekunden, verdeckt nominell alle 15 Sekunden abgefragt. Browser und
-Betriebssystem können Hintergrundseiten drosseln oder ganz anhalten. Bei Rückkehr
-zur Ansicht wird sofort neu abgefragt.
-
-In Windows kann der Titel bei eingeblendeten Taskleistenbeschriftungen in einem
-eigenen Browserfenster sichtbar bleiben. Anzeige, Kürzung und Aktualisierung im
-minimierten Zustand müssen am Zielsystem geprüft werden. Diese Version enthält
-keinen Tray-Dienst und ändert keine Taskleisteneinstellungen.
+Der Titel meldet beispielsweise `2 warten · 1 Gespräch · kienzlefon`. Sichtbare Seiten fragen ungefähr alle zwei Sekunden ab, verdeckte nominell alle 15 Sekunden; Browser dürfen Hintergrundseiten drosseln. Bei Rückkehr wird sofort aktualisiert. Verbindungsverlust setzt einen Fehlerstatus und entfernt alte Zähler.
 
 ## Wähl- und Aktenlinks für kienzlefon
 
-Basisadresse, `client_id` und Rufnummer entsprechend dem Arbeitsplatz einsetzen.
-`telefon` immer URL-kodieren, insbesondere ein internationales Plus als `%2B`.
-Bei Ländercode `49` werden vollständige Rufnummern in den Formen `0176…`,
-`+49176…`, `0049176…` und `49176…` für APS gemeinsam gesucht und gecacht.
+Basisadresse, `client_id` und URL-kodierte Rufnummer ersetzen; ein führendes `+` wird `%2B`.
 
-**Direkt wählen, ohne zusätzlichen Dialog:**
+Direktwahl ohne zusätzlichen Dialog:
 
 ```text
-http://middleware.example:8765/waehlen?client_id=empfang-1&telefon=%2B493055501111&sofort=1
+http://middleware.example:8766/waehlen?client_id=empfang-1&telefon=%2B493055501111&sofort=1
 ```
 
-Die sichtbare, frisch geöffnete Seite sendet einen Anrufauftrag. Zuerst klingelt
-die zugeordnete Nebenstelle; nach Annahme wählt Asterisk das Ziel. Ohne `sofort=1`
-erscheint die normale Wählbestätigung. Ein bloßer HTTP-GET startet keinen Anruf.
-Die Serverzuordnung der Client-ID bestimmt die Nebenstelle. Ein Weblink kann
-zusätzlich `expected_extension` angeben; bei abweichender Zuordnung wird die
-automatische Aktion abgebrochen. Die registrierten [Desktop-Clients](CLIENTS.md)
-prüfen Client-ID und Nebenstelle ebenfalls, senden ihren Auftrag jedoch direkt
-an die API und öffnen dabei keine Browserseite.
+Die sichtbare, frisch geöffnete Seite sendet genau einen Auftrag. Ohne `sofort=1` erscheint die Bestätigung. Ein bloßer GET startet keinen Anruf; Aktionsparameter verschwinden aus der Browserhistorie, damit Neuladen oder Zurück keinen Auftrag wiederholt. `expected_extension` kann zusätzlich die erwartete lokale Nebenstelle prüfen.
 
-**Patientenakte anhand einer Rufnummer öffnen:**
+Patientenakte anhand der Rufnummer öffnen:
 
 ```text
-http://middleware.example:8765/patient-oeffnen?client_id=empfang-1&telefon=%2B493055501111
+http://middleware.example:8766/patient-oeffnen?client_id=empfang-1&telefon=%2B493055501111
 ```
 
-Bei einem eindeutigen Treffer erzeugt die Seite die GDT-Datei für den gewählten
-Arbeitsplatz. Bei mehreren Treffern ist eine Auswahl erforderlich; bei keinem
-Treffer wird nichts geschrieben. Erfolg bestätigt die GDT-Übergabe, nicht deren
-bereits abgeschlossenen Import durch T2med. Eine noch vorhandene Importdatei wird atomar durch den neuesten Aufruf ersetzt.
+Bei einem eindeutigen Treffer mit echter Patientennummer erzeugt die Seite die GDT-Datei, bei mehreren erscheint die Auswahl, bei keinem wird nichts geschrieben. Erfolg bestätigt die Übergabe, nicht die bereits sichtbare Akte. Beide Linktypen akzeptieren `&view=compact` oder `&view=full`.
 
-Aktionsparameter verschwinden vor der Verarbeitung aus der Browserhistorie.
-Neuladen/Zurück löst keine erneute Wahl oder GDT aus. Ein erneuter bewusster Klick
-auf den vollständigen Originallink ist ein neuer Auftrag. Bei ungewissem Ergebnis
-zuerst das Telefon beziehungsweise den T2med-Import prüfen.
-
-Beide Linktypen können `&view=compact` oder `&view=full` enthalten. Benutzerdaten,
-AMI-Secret oder APS-Passwort gehören nie in diese URLs.
+Für `tel:`-/`callto:`-Links ohne Browserfenster dienen die [Desktop-Clients](CLIENTS.md). Zugangsdaten gehören nie in Weblinks.

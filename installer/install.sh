@@ -136,14 +136,14 @@ case "${ID:-}" in
 esac
 
 # Bootstrap only PHP tooling here; do not install or reconfigure Samba before its preflight.
-if ! command -v php >/dev/null 2>&1 || ! command -v composer >/dev/null 2>&1 || ! php -r 'exit(extension_loaded("mbstring") ? 0 : 1);'; then
+if ! command -v php >/dev/null 2>&1 || ! command -v composer >/dev/null 2>&1 || ! php -r 'exit(extension_loaded("mbstring") && extension_loaded("pdo_sqlite") ? 0 : 1);'; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get update
-    apt-get install -y --no-upgrade php-cli php-mbstring composer
+    apt-get install -y --no-upgrade php-cli php-mbstring php-sqlite3 composer
 fi
 [ -x /usr/bin/php ] || fail "/usr/bin/php fehlt; die systemd-Unit verwendet diesen festen Pfad."
 /usr/bin/php -r 'exit(version_compare(PHP_VERSION, "8.2.0", ">=") ? 0 : 1);' || fail "PHP 8.2 oder neuer ist erforderlich."
-/usr/bin/php -r 'foreach (["json", "openssl", "mbstring"] as $e) { if (!extension_loaded($e)) { fwrite(STDERR, $e." fehlt\n"); exit(1); }}' || fail "Erforderliche PHP-Erweiterungen fehlen."
+/usr/bin/php -r 'foreach (["json", "openssl", "mbstring", "pdo_sqlite"] as $e) { if (!extension_loaded($e)) { fwrite(STDERR, $e." fehlt\n"); exit(1); }}' || fail "Erforderliche PHP-Erweiterungen fehlen."
 [ -f "$SOURCE_ROOT/composer.json" ] || fail "composer.json fehlt im Quellpaket."
 [ -f "$SOURCE_ROOT/composer.lock" ] || fail "committed composer.lock fehlt; Installation wird nicht reproduzierbar fortgesetzt."
 [ -f "$SOURCE_ROOT/bin/server.php" ] || fail "bin/server.php fehlt im Quellpaket."
@@ -197,10 +197,16 @@ trap rollback EXIT HUP INT TERM
 
 STAGE=$WORK_DIR/app-stage
 mkdir "$STAGE"
-for item in composer.json composer.lock config.example.json config.example.toml bin src public installer clients; do
+for item in composer.json composer.lock LICENSE config.example.json config.example.toml bin src public installer clients libexec; do
     [ -e "$SOURCE_ROOT/$item" ] || fail "Anwendungsbestandteil fehlt: $item"
     cp -R -- "$SOURCE_ROOT/$item" "$STAGE/$item"
 done
+case "$(uname -m)" in
+    x86_64|amd64) FHIR_ARCH=amd64 ;;
+    aarch64|arm64) FHIR_ARCH=arm64 ;;
+    *) fail "Keine FHIR-Import-Binary für diese Architektur vorhanden." ;;
+esac
+install -m 0755 "$STAGE/libexec/fhir-importer-linux-$FHIR_ARCH" "$STAGE/libexec/fhir-importer"
 for item in assets templates; do
     [ ! -e "$SOURCE_ROOT/$item" ] || cp -R -- "$SOURCE_ROOT/$item" "$STAGE/$item"
 done
@@ -333,6 +339,7 @@ touch "$APP_DIR/.kienzlefon-installed"
 chown -R root:root "$APP_DIR"
 find "$APP_DIR" -type d -exec chmod 0755 {} \;
 find "$APP_DIR" -type f -exec chmod 0644 {} \;
+chmod 0755 "$APP_DIR/libexec/fhir-importer" "$APP_DIR/libexec/fhir-importer-linux-amd64" "$APP_DIR/libexec/fhir-importer-linux-arm64"
 
 install -d -o root -g "$SERVICE_USER" -m 0750 "$CONFIG_DIR"
 if [ -f "$CONFIG_FILE" ]; then CONFIG_EXISTED=1; CONFIG_BACKUP=$WORK_DIR/config.backup; cp -p -- "$CONFIG_FILE" "$CONFIG_BACKUP"; fi

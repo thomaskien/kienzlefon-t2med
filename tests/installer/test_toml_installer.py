@@ -82,6 +82,7 @@ class TomlInstallerTests(unittest.TestCase):
             legacy = Path(temp) / 'config.json'
             target = Path(temp) / 'config.toml'
             config = json.loads((ROOT / 'config.example.json').read_text())
+            config['patients']['provider'] = 'aps'
             config['ami']['secret'] = 'secret # "quoted" \\ Umlaut ä'
             config['aps']['password'] = ''
             config['telephony']['queues'] = []
@@ -130,11 +131,12 @@ class TomlInstallerTests(unittest.TestCase):
             existing = Path(temp) / 'existing.json'
             target = Path(temp) / 'configured.toml'
             config = json.loads((ROOT / 'config.example.json').read_text())
+            config['patients']['provider'] = 'aps'
             config['aps']['password'] = 'retained-aps'
             config['ami']['secret'] = 'retained-ami'
             existing.write_text(json.dumps(config))
             answers = [
-                '', '', '', '', '', '', '', '', '', '', '', '', '',
+                '', '', '', '', '', '', '', '', '', '', '', '', '', '',
                 '', '',
                 '', '', '211', '',
                 'labor', 'Labor', '303', 'labor-gdt', '',
@@ -163,10 +165,11 @@ class TomlInstallerTests(unittest.TestCase):
             existing = Path(temp) / 'existing.json'
             target = Path(temp) / 'configured.toml'
             config = json.loads((ROOT / 'config.example.json').read_text())
+            config['patients']['provider'] = 'aps'
             config['clients'] = {}
             existing.write_text(json.dumps(config))
             for id_to_add, expected in [('201', ['201']), ('001', ['201', '001'])]:
-                answers = [''] * 15  # Existing server settings and credentials.
+                answers = [''] * 16  # Existing server settings and credentials.
                 if id_to_add == '001':
                     answers += [''] * 4  # Retain the numeric client added above.
                 answers += [id_to_add, 'Arbeitsplatz ' + id_to_add, '201', '', '']

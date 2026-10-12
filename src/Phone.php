@@ -14,7 +14,10 @@ final class Phone
     public static function external(string $value, array $extensions = []): string
     {
         try { $n = self::normalize($value); } catch (\InvalidArgumentException) { return ''; }
-        return strlen(ltrim($n, '+')) >= 7 && !isset($extensions[$n]) ? $n : '';
+        // A national number can have a two-digit area code and three local digits,
+        // e.g. 030111. Known extensions still always remain internal.
+        $minimum = str_starts_with($n, '0') ? 6 : 7;
+        return strlen(ltrim($n, '+')) >= $minimum && !isset($extensions[$n]) ? $n : '';
     }
     public static function variants(string $number, string $country = '49'): array
     {

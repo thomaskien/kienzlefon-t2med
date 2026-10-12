@@ -12,7 +12,7 @@ const fixture = () => ({generated_at:new Date().toISOString(),ami_connected:true
   const browser = await chromium.launch({headless:true, ...(process.env.UI_BROWSER_CHANNEL ? {channel:process.env.UI_BROWSER_CHANNEL} : {})}); let passed = 0;
   async function run(name,fn) {
     const context = await browser.newContext({viewport:{width:250,height:210},hasTouch:name.startsWith('Touch')}), page = await context.newPage();
-    const state = {data:fixture(),clients:[{id:'empfang-1',label:'Empfang',extension:'201'},{id:'zimmer-2',label:'Zimmer',extension:'202'}],posts:[],offline:false,lookup:null,errors:[],transferDelay:0,transferFailures:0,callbackDelay:0,retryFailures:0,dismissFailures:0,cleanupFailures:0,keepRemovedSnapshots:false};
+    const state = {data:fixture(),clients:[{id:'empfang-1',label:'Empfang',extension:'201'},{id:'zimmer-2',label:'Zimmer',extension:'202'}],posts:[],offline:false,lookup:null,patientSearch:null,errors:[],transferDelay:0,transferFailures:0,callbackDelay:0,retryFailures:0,dismissFailures:0,cleanupFailures:0,keepRemovedSnapshots:false};
     page.on('pageerror',e => state.errors.push(String(e)));
     await page.route('http://kienzlefon.test/**',async route => {
       const req = route.request(), url = new URL(req.url());
@@ -20,9 +20,13 @@ const fixture = () => ({generated_at:new Date().toISOString(),ami_connected:true
         if (req.method() === 'POST') state.posts.push({path:url.pathname,body:req.postDataJSON()});
         if (url.pathname === '/api/v1/bootstrap') return route.fulfill({json:{token:'demo-token',demo:true,version:'1.3.6',author:'Dr. Thomas Kienzle',clients:state.clients}});
         if (url.pathname === '/api/v1/telephony') return state.offline ? route.abort() : route.fulfill({json:state.data});
+        if (url.pathname === '/api/v1/patients/search') {
+          const body=req.postDataJSON(), result=typeof state.patientSearch === 'function' ? state.patientSearch(body) : state.patientSearch;
+          return route.fulfill({json:result || {lookup_id:'manual-search',query:body.query.trim(),status:'ambiguous',patients:[patient(91001,'Berta','Becker'),patient(91002,'Bernd','Becker')],truncated:false}});
+        }
         if (url.pathname === '/api/v1/lookup') return route.fulfill({json:state.lookup || {number:'0305550103',lookup_id:'search',status:'ambiguous',patients:fixture().calls[2].patients}});
         if (url.pathname === '/api/v1/patient-open') return route.fulfill({json:{message:'Demo: Akte geöffnet'}});
-        if (url.pathname === '/api/v1/calls') return route.fulfill({status:202,json:{phase:'demo'}});
+        if (url.pathname === '/api/v1/calls') { if (state.callbackDelay) await new Promise(resolve => setTimeout(resolve,state.callbackDelay)); return route.fulfill({status:202,json:{phase:'demo'}}); }
         const retryAction=url.pathname.match(/^\/api\/v1\/calls\/([^/]+)\/retry$/);
         if (retryAction) {
           if (state.callbackDelay) await new Promise(resolve => setTimeout(resolve,state.callbackDelay));
@@ -85,6 +89,32 @@ const fixture = () => ({generated_at:new Date().toISOString(),ami_connected:true
       assert.equal(await page.locator('#client').inputValue(),id);
       assert.equal(state.posts.filter(p=>p.path==='/api/v1/calls').length,1);
     });
+    await run('Nebenstellen: Statusfarben, direkte Wahl, Doppelklickschutz und Sperren',async ({page,state,go}) => {
+      state.data.extensions[2].state='ringing';
+      await go(); await page.locator('#more-toggle').click();
+      const row=id=>page.locator('#compact-extensions [data-extension="'+id+'"]');
+      assert.equal(await page.locator('#compact-own-status').innerText(),'BELEGT');
+      assert.equal(await row('201').locator('span').innerText(),'BELEGT');
+      assert.equal(await row('202').locator('span').innerText(),'FREI');
+      assert.equal(await row('203').locator('span').innerText(),'klingelt');
+      for (const [id,color] of [['201','rgb(198, 40, 40)'],['202','rgb(22, 129, 58)'],['203','rgb(153, 112, 0)']]) assert.equal(await row(id).locator('span').evaluate(n=>getComputedStyle(n).color),color);
+      assert.ok(await row('201').isDisabled()); assert.ok(await row('202').isDisabled());
+      state.data.calls=state.data.calls.filter(c=>!c.extensions.includes('201')); state.data.extensions[0].state='idle';
+      await page.waitForFunction(()=>!document.querySelector('#compact-extensions [data-extension="202"]').disabled);
+      state.callbackDelay=200;
+      await row('202').evaluate(n=>{n.click();n.click();});
+      await page.waitForFunction(()=>!document.querySelector('#toast').hidden);
+      const calls=state.posts.filter(p=>p.path==='/api/v1/calls'); assert.equal(calls.length,1);
+      assert.equal(calls[0].body.number,'202'); assert.equal(calls[0].body.extension,'201'); assert.equal(calls[0].body.client_id,'empfang-1');
+      assert.ok(!await page.locator('#dial-dialog').isVisible());
+      assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+      if (process.env.UI_SCREENSHOT) { await page.locator('#toast').evaluate(n=>n.hidden=true); await page.screenshot({path:process.env.UI_SCREENSHOT.replace('.png','-extensions.png'),fullPage:true}); }
+      state.data.stale=true;
+      await page.waitForFunction(()=>document.querySelector('#compact-extensions [data-extension="202"]').disabled);
+      assert.equal(await row('202').locator('span').innerText(),'Status unbekannt');
+      await page.getByRole('button',{name:'Übersicht ↗'}).click();
+      assert.ok(await page.locator('#extensions [data-extension="202"]').isDisabled());
+    });
     await run('250 × 210: separate conversations and queue, own call, demo and release footer fit',async ({page,go}) => {
       await go(); assert.equal(await page.locator('#compact-own .compact-name-text').innerText(),'Mara Berger');
       assert.equal(await page.locator('#compact-own .compact-dob').innerText(),'02.01.1980');
@@ -97,7 +127,7 @@ const fixture = () => ({generated_at:new Date().toISOString(),ami_connected:true
       assert.deepEqual(await page.locator('#compact-waiting .row-mark').allTextContents(),['1','2']);
       assert.match(await page.title(),/^DEMO · 2 warten · 1 Gespräch/);
       assert.equal(await page.locator('#compact-demo').isVisible(),true);
-      assert.equal(await page.locator('.compact-credit').innerText(),'v1.3.6 · von Dr. Thomas Kienzle');
+      assert.equal(await page.locator('.compact-credit').innerText(),'kienzlefon v1.3.6 von Dr. Thomas Kienzle');
       const bounds = await page.locator('.compact-footer').boundingBox(); assert.ok(bounds.y+bounds.height <= 210,JSON.stringify(bounds));
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       assert.equal(await page.locator('#compact-shell [data-action="callback"]').count(),0);
@@ -292,6 +322,40 @@ const fixture = () => ({generated_at:new Date().toISOString(),ami_connected:true
       await page.getByRole('button',{name:'Kompaktansicht',exact:true}).click(); await page.locator('#menu-toggle').click();
       await page.getByRole('button',{name:'Telefonie-App einrichten'}).click(); assert.match(await page.locator('#setup-command').innerText(),/empfang-1/);
     });
+    await run('Manual patient search accepts names, patient numbers and phone numbers',async ({page,state,go}) => {
+      state.patientSearch=({query}) => ({lookup_id:'manual-'+query,query:query.trim(),status:'ambiguous',patients:[patient(91001,'Berta','Becker'),patient(null,'Bernd','Becker')],truncated:false});
+      await go(); await page.locator('#menu-toggle').click();
+      assert.equal(await page.locator('#number').getAttribute('type'),'text');
+      assert.match(await page.locator('#number').getAttribute('placeholder'),/Name.*Patienten.*Telefonnummer/);
+      await page.locator('#number').fill('  Beck  '); await page.getByRole('button',{name:'Patient suchen'}).click();
+      await page.waitForFunction(() => document.querySelector('#search-number').textContent === 'Beck');
+      assert.deepEqual(state.posts.filter(p=>p.path==='/api/v1/patients/search').at(-1).body,{query:'  Beck  '});
+      assert.equal(await page.locator('#patients .patient').count(),2);
+      assert.equal(await page.locator('#patients .patient').nth(1).isDisabled(),true);
+      assert.match(await page.locator('#patients .patient').nth(1).innerText(),/Patientennummer fehlt/);
+      await page.locator('#patients .patient').first().click(); await page.waitForFunction(() => !document.querySelector('#toast').hidden);
+      const opened=state.posts.filter(p=>p.path==='/api/v1/patient-open').at(-1);
+      assert.equal(opened.body.lookup_id,'manual-  Beck  '); assert.equal(opened.body.patient_number,91001);
+      for (const value of ['91001','030 5550101']) {
+        await page.locator('#number').fill(value); await page.getByRole('button',{name:'Patient suchen'}).click();
+        await page.waitForFunction(expected => document.querySelector('#search-number').textContent === expected,value);
+      }
+      assert.deepEqual(state.posts.filter(p=>p.path==='/api/v1/patients/search').slice(-2).map(p=>p.body.query),['91001','030 5550101']);
+      assert.equal(state.posts.filter(p=>p.path==='/api/v1/lookup').length,0);
+    });
+    await run('Truncated search is safe and names cannot be dialed',async ({page,state,go}) => {
+      state.patientSearch=({query}) => ({lookup_id:'manual-truncated',query:query.trim(),status:'ambiguous',patients:[patient(92001,'Eva','Becker')],truncated:true});
+      await go(); await page.locator('#menu-toggle').click();
+      const unsafe='<img src=x onerror="window.injected=true">';
+      await page.locator('#number').fill(unsafe); await page.getByRole('button',{name:'Patient suchen'}).click();
+      await page.waitForFunction(expected => document.querySelector('#search-number').textContent === expected,unsafe);
+      assert.equal(await page.locator('#search-number img').count(),0); assert.equal(await page.evaluate(() => window.injected),undefined);
+      assert.match(await page.locator('#patients').innerText(),/ersten 200 Namenstreffer/); assert.match(await page.locator('#patients').innerText(),/Suchtext präzisieren/);
+      await page.locator('#number').fill('Eva Becker'); await page.getByRole('button',{name:'Anrufen'}).click();
+      await page.waitForFunction(() => !document.querySelector('#toast').hidden);
+      assert.match(await page.locator('#toast').innerText(),/gültige Telefonnummer/);
+      assert.equal(await page.locator('#dial-dialog').isVisible(),false); assert.equal(state.posts.filter(p=>p.path==='/api/v1/calls').length,0);
+    });
     await run('Immediate dial submits once, with correct mapping, no reload/back replay',async ({page,state,go}) => {
       await go('/waehlen?client_id=empfang-1&telefon=%2B493012345&sofort=1');
       await page.waitForFunction(() => !document.querySelector('#toast').hidden);
@@ -319,10 +383,17 @@ const fixture = () => ({generated_at:new Date().toISOString(),ami_connected:true
     await run('Patient link: automatic unique GDT, ambiguous selection, no reload replay',async ({page,state,go}) => {
       state.lookup={number:'03012345',lookup_id:'search',status:'resolved',patients:[patient(90009,'Test','Person')]};
       await go('/patient-oeffnen?client_id=empfang-1&telefon=03012345'); await page.waitForFunction(() => !document.querySelector('#toast').hidden);
+      assert.deepEqual(state.posts.filter(p=>p.path==='/api/v1/lookup').at(-1).body,{number:'03012345'});
       assert.equal(state.posts.filter(p => p.path.endsWith('patient-open')).length,1);
       await page.reload(); await page.waitForFunction(() => document.querySelector('#compact-counts').textContent.includes('2 warten')); assert.equal(state.posts.filter(p => p.path.endsWith('patient-open')).length,1);
       state.lookup=null; await go('/patient-oeffnen?client_id=empfang-1&telefon=03012345'); await page.locator('#patients .patient').first().waitFor();
       assert.equal(state.posts.filter(p => p.path.endsWith('patient-open')).length,1); assert.equal(await page.locator('#patients .patient').count(),2);
+      state.patientSearch={lookup_id:'manual-after-link',query:'Becker',status:'resolved',patients:[patient(90004,'Anna','Becker')],truncated:false};
+      await page.locator('#menu-toggle').click(); await page.locator('#number').fill('Becker'); await page.getByRole('button',{name:'Patient suchen'}).click();
+      await page.waitForFunction(() => document.querySelector('#search-number').textContent === 'Becker');
+      assert.deepEqual(state.posts.filter(p=>p.path==='/api/v1/patients/search').at(-1).body,{query:'Becker'});
+      assert.equal(state.posts.filter(p=>p.path==='/api/v1/lookup').length,2);
+      assert.equal(state.posts.filter(p=>p.path==='/api/v1/patient-open').length,1);
     });
     await run('Each confirmed patient click is a new GDT request, even when returning immediately',async ({page,state,go}) => {
       await go();

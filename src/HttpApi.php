@@ -31,17 +31,23 @@ final class HttpApi
                 return self::json(['token'=>$this->token,'clients'=>$clients,'demo'=>$this->runtime->demo,'version'=>Version::CURRENT,'author'=>Version::AUTHOR]);
             }
             if ($method === 'GET' && $path === '/api/v1/telephony') return self::json($this->runtime->view());
+            if ($method === 'GET' && $path === '/api/v1/fhir/status') return self::json($this->runtime->directoryStatus());
             if ($method === 'GET' && $path === '/healthz') return self::json(['status'=>'ok','demo'=>$this->runtime->demo,'version'=>Version::CURRENT]);
             if ($method === 'POST') {
                 if (!hash_equals($this->token, $request->getHeaderLine('X-Kienzlefon-Token'))) return self::json(['error'=>'Sitzung abgelaufen. Seite neu laden.'], 403);
                 if (strtolower(trim(explode(';', $request->getHeaderLine('Content-Type'))[0])) !== 'application/json') return self::json(['error'=>'JSON erforderlich.'], 415);
                 $body = (string)$request->getBody();
-                if (strlen($body) > 8192) return self::json(['error'=>'Anfrage zu groß.'], 413);
+                if (strlen($body) > ($path === '/api/v1/fhir/import' ? 16384 : 8192)) return self::json(['error'=>'Anfrage zu groß.'], 413);
                 $input = json_decode($body, true, 16, JSON_THROW_ON_ERROR);
                 if (!is_array($input) || array_is_list($input)) throw new \InvalidArgumentException('JSON-Objekt erforderlich.');
+                if ($path === '/api/v1/fhir/import') return self::json($this->runtime->importPatients($input), 202);
+                if ($path === '/api/v1/patients/search') {
+                    if (!is_string($input['query'] ?? null)) throw new \InvalidArgumentException('Suchtext fehlt.');
+                    return $this->runtime->searchPatients($input['query'])->then(static function ($result) { $result['patients'] = Patients::publicPatients($result['patients']); unset($result['name']); return self::json($result); }, self::failure(...));
+                }
                 if ($path === '/api/v1/lookup') {
                     if (!is_string($input['number'] ?? null)) throw new \InvalidArgumentException('Rufnummer fehlt.');
-                    return $this->runtime->lookup($input['number'])->then(static function ($result) { $result['patients'] = Aps::publicPatients($result['patients']); unset($result['name']); return self::json($result); }, self::failure(...));
+                    return $this->runtime->lookup($input['number'])->then(static function ($result) { $result['patients'] = Patients::publicPatients($result['patients']); unset($result['name']); return self::json($result); }, self::failure(...));
                 }
                 if ($path === '/api/v1/patient-open') return self::json($this->runtime->openPatient($input));
                 if ($path === '/api/v1/calls') return $this->runtime->originate($input)->then(static fn($call) => self::json($call, 202), self::failure(...));
@@ -56,6 +62,7 @@ final class HttpApi
             }
             if ($method !== 'GET' && $method !== 'HEAD') return self::json(['error'=>'Methode nicht erlaubt.'], 405);
             $assets = ['/' => ['index.html','text/html; charset=utf-8'], '/patient-oeffnen'=>['index.html','text/html; charset=utf-8'], '/waehlen'=>['index.html','text/html; charset=utf-8'], '/app.js'=>['app.js','application/javascript; charset=utf-8'], '/style.css'=>['style.css','text/css; charset=utf-8'], '/favicon.svg'=>['favicon.svg','image/svg+xml']];
+            $assets += ['/telefonverzeichnis-aktualisieren'=>['fhir.html','text/html; charset=utf-8'], '/telefonverzeichnis-aktualisieren.php'=>['fhir.html','text/html; charset=utf-8'], '/fhir.js'=>['fhir.js','application/javascript; charset=utf-8'], '/fhir.css'=>['fhir.css','text/css; charset=utf-8']];
             if (!isset($assets[$path])) return self::json(['error'=>'Seite nicht gefunden.'], 404);
             [$file,$type] = $assets[$path];
             return new Response(200, self::headers() + ['Content-Type'=>$type], $method === 'HEAD' ? '' : file_get_contents(dirname(__DIR__) . '/public/' . $file));

@@ -12,6 +12,8 @@ final class Runtime
     private Telephony $state;
     private ?Ami $ami = null;
     private ?Aps $aps = null;
+    private ?PatientDirectory $directory = null;
+    private ?FhirImport $fhir = null;
     private Gdt $gdt;
     private Transfers $transfers;
     private array $lookups = [];
@@ -24,7 +26,14 @@ final class Runtime
     {
         $this->state = new Telephony($config['telephony']);
         $this->gdt = new Gdt($config['gdt'], $config['clients']);
-        if (!$demo) { $this->ami = new Ami($config['ami']); $this->aps = new Aps($config['aps'], $config['telephony']['country_code']); }
+        if (!$demo) {
+            $this->ami = new Ami($config['ami']);
+            if (($config['patients']['provider'] ?? 'fhir') === 'aps') $this->aps = new Aps($config['aps'], $config['telephony']['country_code']);
+            else {
+                $this->directory = new PatientDirectory($config['fhir'], $config['telephony']['country_code']);
+                $this->fhir = new FhirImport($config['fhir'], $this->directory, function () { $this->lookups = []; $this->phoneLookups = []; });
+            }
+        }
         $this->transfers = new Transfers($this->state, fn(string $action, array $fields) => $this->ami->action($action,$fields), $config, $demo);
     }
     public function start(): void
@@ -42,7 +51,13 @@ final class Runtime
         $this->ami->start();
         Loop::addPeriodicTimer(1, fn() => $this->refreshLookups());
     }
-    public function stop(): void { $this->ami?->stop(); }
+    public function stop(): void { $this->fhir?->stop(); $this->ami?->stop(); }
+    public function directoryStatus(): array { return $this->fhir?->status() ?? ['provider'=>$this->demo ? 'demo' : 'aps']; }
+    public function importPatients(array $input): array
+    {
+        if ($this->fhir === null) throw new \RuntimeException('FHIR-Abgleich ist in diesem Betriebsmodus deaktiviert.');
+        return $this->fhir->start($input);
+    }
     private function synchronize(): void
     {
         if ($this->syncing || !$this->ami?->connected()) return;
@@ -65,17 +80,41 @@ final class Runtime
         if (count($this->lookups) >= 512) { $this->collect(); if (count($this->lookups) >= 512) throw new \RuntimeException('Zu viele Suchaufträge. Bitte kurz warten.'); }
         $id = bin2hex(random_bytes(16));
         $this->phoneLookups[$key] = $id;
-        $this->lookups[$id] = ['expires'=>microtime(true) + max(5, $this->config['aps']['cache_seconds']), 'number'=>$number, 'result'=>['status'=>'pending','name'=>'','patients'=>[]]];
-        $promise = $this->demo ? resolve($this->demoLookup($number)) : $this->aps->lookup($number);
+        $this->lookups[$id] = ['expires'=>microtime(true) + max(5, $this->config[$this->aps ? 'aps' : 'fhir']['cache_seconds']), 'number'=>$number, 'result'=>['status'=>'pending','name'=>'','patients'=>[]]];
+        try { $promise = $this->demo ? resolve($this->demoLookup($number)) : ($this->aps ? $this->aps->lookup($number) : resolve($this->directory->lookup($number))); }
+        catch (\Throwable $error) { $promise = \React\Promise\reject($error); }
         $promise = $promise->then(function ($result) use ($id, $number) {
             if (isset($this->lookups[$id])) $this->lookups[$id]['result'] = $result;
             return ['lookup_id'=>$id,'number'=>$number] + $result;
         }, function (\Throwable $error) use ($id, $number) {
-            $result = ['status'=>$error->getCode() === 408 ? 'timeout' : 'error', 'name'=>'', 'patients'=>[], 'message'=>'APS-Abfrage fehlgeschlagen. Verbindung und Zugang prüfen.'];
+            $result = ['status'=>$error->getCode() === 408 ? 'timeout' : 'error', 'name'=>'', 'patients'=>[], 'message'=>'Patientensuche nicht verfügbar. Verbindungs- beziehungsweise Importstatus prüfen.'];
             if (isset($this->lookups[$id])) { $this->lookups[$id]['result'] = $result; $this->lookups[$id]['expires'] = microtime(true) + 5; }
             return ['lookup_id'=>$id, 'number'=>$number] + $result;
         });
         $this->lookups[$id]['promise'] = $promise;
+        return $promise;
+    }
+    public function searchPatients(string $query): PromiseInterface
+    {
+        $query = PatientDirectory::searchQuery($query);
+        if (count($this->lookups) >= 512) { $this->collect(); if (count($this->lookups) >= 512) throw new \RuntimeException('Zu viele Suchaufträge. Bitte kurz warten.'); }
+        $id = bin2hex(random_bytes(16));
+        // Separate result IDs allow the existing checked GDT selection, without
+        // adding names or patient-number matches to the telephone lookup cache.
+        $this->lookups[$id] = ['expires'=>microtime(true) + max(5, $this->config[$this->aps ? 'aps' : 'fhir']['cache_seconds']), 'result'=>['status'=>'pending','name'=>'','patients'=>[]]];
+        try {
+            $promise = $this->demo ? resolve($this->demoSearch($query)) : ($this->aps
+                ? $this->aps->search($query)->then(static fn($rows) => Aps::classify([$rows], []) + ['truncated'=>false])
+                : resolve($this->directory->search($query)));
+        } catch (\Throwable $error) { $promise = \React\Promise\reject($error); }
+        $promise = $promise->then(function ($result) use ($id,$query) {
+            if (isset($this->lookups[$id])) $this->lookups[$id]['result'] = $result;
+            return ['lookup_id'=>$id,'query'=>$query] + $result;
+        }, function (\Throwable $error) use ($id) {
+            unset($this->lookups[$id]);
+            throw new \RuntimeException('Patientensuche nicht verfügbar. Verbindungs- beziehungsweise Importstatus prüfen.');
+        });
+        if (isset($this->lookups[$id])) $this->lookups[$id]['promise'] = $promise;
         return $promise;
     }
     public function openPatient(array $input): array
@@ -107,7 +146,9 @@ final class Runtime
         $clientId = $input['client_id'] ?? '';
         $client = $this->client($clientId);
         if (($input['extension'] ?? '') !== $client['extension']) throw new \InvalidArgumentException('Nebenstelle passt nicht zum Arbeitsplatz.');
-        $number = Phone::normalize($input['number'] ?? '');
+        $rawNumber = $input['number'] ?? '';
+        $number = is_string($rawNumber) && isset($this->config['telephony']['extensions'][$rawNumber]) ? $rawNumber : Phone::normalize($rawNumber);
+        if ($number === $client['extension']) throw new \InvalidArgumentException('Die eigene Nebenstelle kann nicht angerufen werden.');
         $id = self::requestId($input['request_id'] ?? '');
         $signature = $clientId . ':' . $number;
         if (isset($this->outgoing[$id])) {
@@ -119,13 +160,17 @@ final class Runtime
         if (count($this->outgoing) >= 100) throw new \RuntimeException('Zu viele Telefonieaufträge. Bitte kurz warten.');
         $this->outgoing[$id] = ['request_id'=>$id,'client_id'=>$clientId,'extension'=>$client['extension'],'number'=>$number,'phase'=>'requested','created_at'=>gmdate('c'),'_created'=>microtime(true),'_signature'=>$signature,'_source'=>'kf-' . $id,'_target'=>'','_legs'=>[],'_answered'=>false,'_ever_connected'=>false,'_hidden'=>false,'_expires'=>microtime(true) + 600];
         if ($this->demo) { $this->outgoing[$id]['phase'] = 'demo'; return resolve($this->publicOutgoing($this->outgoing[$id])); }
+        // The external click-to-dial context intentionally rejects internal targets.
+        // Only configured numeric extensions may use the direct internal Dial route.
+        $route = isset($this->config['telephony']['extensions'][$number])
+            ? ['Application'=>'Dial','Data'=>'PJSIP/' . $number . ',' . (int)ceil($this->config['telephony']['originate_timeout_ms'] / 1000) . ',f(' . $client['extension'] . ')']
+            : ['Context'=>$this->config['telephony']['originate_context'], 'Exten'=>$number, 'Priority'=>'1'];
         return $this->ami->action('Originate', [
             'Channel'=>'PJSIP/' . $client['extension'], 'ChannelId'=>'kf-' . $id,
-            'Context'=>$this->config['telephony']['originate_context'], 'Exten'=>$number, 'Priority'=>'1', 'Async'=>'true', 'EarlyMedia'=>'false',
-            // A workflow label must not become the remote party's display name.
-            'Timeout'=>$this->config['telephony']['originate_timeout_ms'], 'CallerID'=>$number . ' <' . $number . '>',
+            'Async'=>'true', 'EarlyMedia'=>'false',
+            'Timeout'=>$this->config['telephony']['originate_timeout_ms'], 'CallerID'=>$this->dialCallerId($number),
             'Variable'=>['__KF_C2D_ID=' . $id, '__KF_C2D_CLIENT=' . $clientId, '__KF_C2D_EXTENSION=' . $client['extension']],
-        ], null, 'kf-c2d-' . $id)->then(function () use ($id) {
+        ] + $route, null, 'kf-c2d-' . $id)->then(function () use ($id) {
             if ($this->outgoing[$id]['phase'] === 'requested') $this->outgoing[$id]['phase'] = 'ringing_extension';
             return $this->publicOutgoing($this->outgoing[$id]);
         }, function () use ($id) {
@@ -133,6 +178,21 @@ final class Runtime
             $this->outgoing[$id]['phase'] = 'unknown';
             return $this->publicOutgoing($this->outgoing[$id]);
         });
+    }
+    private function dialCallerId(string $number): string
+    {
+        // Look up the dialled number, never a patient number or a workflow label.
+        // Internal destinations must not accidentally match a patient's local number.
+        $name = '';
+        if ($this->directory && !isset($this->config['telephony']['extensions'][$number])) {
+            try {
+                $result = $this->directory->lookup($number);
+                if ($result['status'] === 'resolved') $name = $result['name'];
+            } catch (\Throwable) { /* An unavailable directory must not block dialing. */ }
+        }
+        // Keep the AMI CallerID grammar intact, even for quotes in patient names.
+        $name = trim(str_replace(['"', '<', '>', '\\'], ' ', $name));
+        return '"' . $name . '" <' . $number . '>';
     }
     private function onEvent(array $e): void
     {
@@ -206,7 +266,7 @@ final class Runtime
                 $lookup = $this->lookups[$id];
                 if ($lookup['expires'] > microtime(true)) {
                     $call['lookup_id'] = $id; $call['name_status'] = $lookup['result']['status'];
-                    $call['patients'] = Aps::publicPatients($lookup['result']['patients']);
+                    $call['patients'] = Patients::publicPatients($lookup['result']['patients']);
                     $call['name'] = $lookup['result']['name'];
                 }
             }
@@ -226,6 +286,7 @@ final class Runtime
         unset($call);
         $view['outgoing'] = array_values(array_map($this->publicOutgoing(...), array_filter($this->outgoing, fn($call) => !($call['_hidden'] ?? false))));
         $view['transfers'] = $this->transfers->view();
+        $view['patient_directory'] = $this->directoryStatus();
         return $view;
     }
     public function transfer(array $input): PromiseInterface { return $this->transfers->start($input); }
@@ -327,7 +388,20 @@ final class Runtime
         $three = ['patient_number'=>90003,'first_name'=>'Anna','last_name'=>'Becker','birth_date'=>'19810319','address'=>'Musterweg 5, Musterstadt','_ref'=>['objectId'=>['id'=>'demo-3'],'revision'=>1]];
         if (str_ends_with($number, '000')) return ['status'=>'not_found','name'=>'','patients'=>[]];
         $patients = str_ends_with($number, '22') ? [$two,$three] : [$one];
-        return ['status'=>count($patients) === 1 ? 'resolved' : 'ambiguous','name'=>count($patients) === 1 ? Aps::displayName($one) : '', 'patients'=>$patients];
+        return ['status'=>count($patients) === 1 ? 'resolved' : 'ambiguous','name'=>count($patients) === 1 ? Patients::displayName($one) : '', 'patients'=>$patients];
+    }
+    private function demoSearch(string $query): array
+    {
+        $people = [...$this->demoLookup('03055501011')['patients'], ...$this->demoLookup('03055501022')['patients']];
+        $terms = preg_split('/[\s,]+/u', Patients::searchKey($query), -1, PREG_SPLIT_NO_EMPTY);
+        $patients = [];
+        foreach ($people as $p) {
+            $name = Patients::searchKey($p['first_name'] . ' ' . $p['last_name']);
+            if ((ctype_digit($query) && (int)$query === $p['patient_number']) || (preg_match('/\p{L}/u', $query) && !array_filter($terms, static fn($t) => !str_contains($name,$t)))) $patients[$p['patient_number']] = $p;
+        }
+        if (Phone::external($query) !== '') foreach ($this->demoLookup(Phone::normalize($query))['patients'] as $p) $patients[$p['patient_number']] = $p;
+        $patients = array_values($patients);
+        return ['status'=>!$patients ? 'not_found' : (count($patients) === 1 ? 'resolved' : 'ambiguous'),'name'=>'','patients'=>$patients,'truncated'=>false];
     }
     private function demoView(): array
     {
@@ -335,7 +409,7 @@ final class Runtime
         foreach ([['demo-1','03055501011','waiting',[],74],['demo-2','03055501022','waiting',[],31],['demo-3','03055501033','connected',['201'],143]] as [$id,$number,$state,$extensions,$duration]) {
             $this->lookup($number)->then(static fn() => null);
             $key = Phone::key($number); $lookupId = $this->phoneLookups[$key]; $result = $this->lookups[$lookupId]['result'];
-            $calls[] = ['id'=>$id,'number'=>$number,'direction'=>'incoming','state'=>$state,'extensions'=>$extensions,'channel_age_seconds'=>$duration,'duration_seconds'=>$state === 'connected' ? $duration : null,'name_status'=>$result['status'],'name'=>$result['name'],'lookup_id'=>$lookupId,'patients'=>Aps::publicPatients($result['patients'])];
+            $calls[] = ['id'=>$id,'number'=>$number,'direction'=>'incoming','state'=>$state,'extensions'=>$extensions,'channel_age_seconds'=>$duration,'duration_seconds'=>$state === 'connected' ? $duration : null,'name_status'=>$result['status'],'name'=>$result['name'],'lookup_id'=>$lookupId,'patients'=>Patients::publicPatients($result['patients'])];
         }
         return ['generated_at'=>gmdate('c'),'ami_connected'=>true,'stale'=>false,'calls'=>$calls,'queues'=>[['name'=>'praxis','waiting_count'=>2,'entries'=>[['call_id'=>'demo-1','position'=>1,'wait_seconds'=>74],['call_id'=>'demo-2','position'=>2,'wait_seconds'=>31]]]],'extensions'=>[['id'=>'201','label'=>'Empfang 1','state'=>'busy','paused'=>false],['id'=>'202','label'=>'Empfang 2','state'=>'idle','paused'=>false]]];
     }

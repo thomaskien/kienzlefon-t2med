@@ -16,7 +16,7 @@ use React\Socket\SocketServer;
 
 $options = getopt('', ['config:', 'demo', 'listen:', 'check-config', 'help', 'version']);
 if (isset($options['version'])) { echo 'kienzlefon-t2med ' . Version::CURRENT . "\n"; exit(0); }
-if (isset($options['help'])) { echo "kienzlefon-t2med\n  --config=/etc/kienzlefon-t2med/config.toml\n  --check-config   Nur Konfiguration prüfen\n  --version        Programmversion anzeigen\n  --demo           Fiktive Daten, kein AMI/APS/GDT\n  --listen=127.0.0.1:8765\n"; exit(0); }
+if (isset($options['help'])) { echo "kienzlefon-t2med\n  --config=/etc/kienzlefon-t2med/config.toml\n  --check-config   Nur Konfiguration prüfen\n  --version        Programmversion anzeigen\n  --demo           Fiktive Daten, kein AMI/FHIR/APS/GDT\n  --listen=127.0.0.1:8765\n"; exit(0); }
 try {
     $demo = isset($options['demo']);
     if ($demo) {
@@ -30,7 +30,7 @@ try {
     if (isset($options['listen']) && !$demo) { $config['http']['listen'] = $options['listen']; $config = Config::validate($config); }
     if (isset($options['check-config'])) { echo "Konfiguration gültig.\n"; exit(0); }
     $runtime = new Runtime($config, $demo);
-    $server = new HttpServer(new StreamingRequestMiddleware(), new LimitConcurrentRequestsMiddleware(64), new RequestBodyBufferMiddleware(8192), new HttpApi($runtime));
+    $server = new HttpServer(new StreamingRequestMiddleware(), new LimitConcurrentRequestsMiddleware(64), new RequestBodyBufferMiddleware(16384), new HttpApi($runtime));
     $server->on('error', static function () { fwrite(STDERR, "HTTP-Anfrage konnte nicht verarbeitet werden.\n"); });
     $socket = new SocketServer($config['http']['listen']);
     $server->listen($socket);

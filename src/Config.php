@@ -58,6 +58,14 @@ final class Config
     public static function validate(array $c): array
     {
         $defaults = json_decode(file_get_contents(dirname(__DIR__) . '/config.example.json'), true, 64, JSON_THROW_ON_ERROR);
+        // Old configurations retain APS credentials, but no longer enable its live search.
+        $c['patients'] ??= $defaults['patients'];
+        if (!isset($c['fhir'])) {
+            $c['fhir'] = $defaults['fhir'];
+            if (isset($c['aps']['url'])) $c['fhir']['base_url'] = rtrim($c['aps']['url'], '/') . '/aps/fhir/api/r4';
+            foreach (['tls_verify','ca_file'] as $field) if (isset($c['aps'][$field])) $c['fhir'][$field] = $c['aps'][$field];
+        }
+        $c['aps'] ??= $defaults['aps'];
         if (array_diff(array_keys($c), array_keys($defaults))) throw new \InvalidArgumentException('Unbekannter Konfigurationsbereich.');
         foreach ($defaults as $key => $values) {
             if (!isset($c[$key]) || !is_array($c[$key])) throw new \InvalidArgumentException("Konfigurationsbereich fehlt: $key");
@@ -79,6 +87,23 @@ final class Config
         self::text($c['aps']['password'], 1024, true);
         self::integer($c['aps']['timeout_seconds'], 1, 30);
         self::integer($c['aps']['cache_seconds'], 0, 3600);
+        if (!in_array($c['patients']['provider'], ['fhir','aps'], true)) throw new \InvalidArgumentException('Patientenquelle muss fhir oder aps sein.');
+        $f = $c['fhir'];
+        self::text($f['base_url'], 2048);
+        $url = parse_url($f['base_url']);
+        if (!$url || ($url['scheme'] ?? '') !== 'https' || !isset($url['host']) || isset($url['user'], $url['pass']) || isset($url['user']) || isset($url['query']) || isset($url['fragment']) || preg_match('~[\\\\%]|(?:^|/)\.{1,2}(?:/|$)~', $url['path'] ?? '')) throw new \InvalidArgumentException('Ungültige FHIR-Basisadresse.');
+        if (!is_bool($f['tls_verify'])) throw new \InvalidArgumentException('FHIR-TLS-Schalter muss boolesch sein.');
+        foreach (['ca_file','local_area_code'] as $field) self::text($f[$field], 2048, true);
+        if ($f['local_area_code'] !== '' && !preg_match('/^0[1-9][0-9]{1,5}$/D', $f['local_area_code'])) throw new \InvalidArgumentException('Ortsvorwahl muss eine deutsche Vorwahl mit führender Null sein.');
+        foreach (['binary','database'] as $field) {
+            self::text($f[$field], 2048);
+            if (!str_starts_with($f[$field], '/') || preg_match('~(?:^|/)\.{1,2}(?:/|$)~', $f[$field]) || str_ends_with($f[$field], '/')) throw new \InvalidArgumentException('FHIR-Dateipfade müssen absolute Dateipfade sein.');
+        }
+        foreach ([$c['gdt']['root'] ?? '', dirname(__DIR__) . '/public'] as $unsafe) if ($unsafe !== '' && str_starts_with($f['database'], rtrim($unsafe, '/') . '/')) throw new \InvalidArgumentException('Patientenbestand darf nicht im GDT-Share oder Webverzeichnis liegen.');
+        self::integer($f['timeout_seconds'], 1, 120);
+        self::integer($f['max_pages'], 1, 100000);
+        self::integer($f['max_patients'], 1, 1000000);
+        self::integer($f['cache_seconds'], 5, 3600);
         self::url($c['http']['public_url']);
         if (!is_string($c['http']['listen']) || !preg_match('/^(?:[a-zA-Z0-9.\-]+|\[[0-9a-fA-F:]+\]):([0-9]{1,5})$/D', $c['http']['listen'], $m) || (int)$m[1] < 1 || (int)$m[1] > 65535) throw new \InvalidArgumentException('Ungültige HTTP-Bindeadresse.');
         foreach (['allowed_hosts','allowed_networks'] as $field) {

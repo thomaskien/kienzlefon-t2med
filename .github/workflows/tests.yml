@@ -13,10 +13,16 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: mbstring, openssl
+          extensions: mbstring, openssl, pdo_sqlite
           tools: composer
           coverage: none
       - run: composer install --no-interaction --prefer-dist
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: false
+      - run: go test ./... && go vet ./...
+        working-directory: fhir-importer
       - run: find src bin installer -name '*.php' -exec php -l {} \;
       - run: php tests/php/run.php
       - run: php tests/installer/run.php
@@ -46,3 +52,4 @@ jobs:
       - run: npm install --no-save --package-lock=false --ignore-scripts playwright@1.62.1
       - run: npx playwright install --with-deps chromium
       - run: node tests/ui/compact.cjs
+      - run: node tests/ui/fhir.cjs

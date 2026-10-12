@@ -107,3 +107,10 @@ test('Erledigt gemeldeter Auftrag mit verbleibendem Kanal wird nicht bereinigt',
     eq($f->visible()[0]['can_cleanup'], false); eq($f->visible()[0]['can_retry'], false);
     eq($f->runtime->cleanupCalls(['client_id'=>'empfang-1']), ['removed'=>[]]);
 });
+
+test('Nebenstellenwahl sperrt Selbstanrufe und erhält konfigurierte kurze Ziele', function () {
+    $f = new OutgoingFixture(); rejects(fn() => $f->runtime->originate(array_replace($f->input(1),['number'=>'201'])));
+    $call = resultOf($f->runtime->originate(array_replace($f->input(2),['number'=>'202']))); eq($call['number'],'202'); eq($call['extension'],'201');
+    $c=config(); $c['telephony']['extensions']['21']='Kurzes Ziel'; $runtime=new Runtime(Config::validate($c),true);
+    eq(resultOf($runtime->originate(array_replace($f->input(3),['number'=>'21'])))['number'],'21');
+});

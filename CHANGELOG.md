@@ -1,5 +1,34 @@
 # Änderungen
 
+## 1.4.3 · 2026-10-12
+
+- Nebenstellen zeigen FREI grün, klingelt gelb und BELEGT rot; ein Klick wählt über den ausgewählten Arbeitsplatz.
+- Wahlhilfe zeigt bei eindeutiger Rufnummernzuordnung den Namen aus dem FHIR-Bestand, sonst eine leere Namensangabe.
+- Kompakte Fußzeile: „kienzlefon v1.4.3 von Dr. Thomas Kienzle“.
+- Hinweis zum Demo-Key (100 Requests), gestraffte Dokumentation und T2med-Einrichtung unter „Drittanbieter konfigurieren“. Beide Übergaben (`?` und `#`) sind praktisch bestätigt.
+- Kurze Hinweise zum ersten und erneuten FHIR-Abgleich, einheitlicher Middleware-Port 8766 in Beispielen und MIT-Lizenz ergänzt.
+
+## 1.4.2 — 12.10.2026
+
+- Gemeinsames Suchfeld für Patientennamen, Namensbestandteile, Patientennummern und Telefonnummern. Vor- und Nachname funktionieren in beliebiger Reihenfolge, einschließlich Umlautschreibweisen wie Müller/Mueller.
+- Patienten ohne Telefonnummer werden gefunden. Akten werden aus der Trefferliste ausgewählt; die automatische Anruferkennung verwendet weiterhin ausschließlich Telefonnummern.
+- Namen können keine Wählanfrage auslösen. Breite Namenssuchen zeigen bis zu 200 Treffer mit Hinweis zum Präzisieren; Rufnummerntreffer bleiben vollständig.
+- „Telefonverzeichnis über FHIR aktualisieren“ benennt die Schnittstelle prominent in Überschrift und Einleitung.
+
+## 1.4.1 — 12.10.2026
+
+- Ortsnummern ohne Vorwahl werden ab drei Ziffern über ihr vollständiges Rufnummernende erkannt. Alle passenden Akten bleiben auswählbar, auch bei unterschiedlich langen oder zusätzlich vollständigen Treffern.
+- Vorhandene FHIR-Bestände verwenden die Erkennung ohne erneuten Import. Originalwerte und Importzeit bleiben erhalten.
+- Statusseite zählt nutzbare Ortsnummern mit und erklärt die Erkennung; gespeicherte, nicht nutzbare Werte werden eindeutig benannt.
+
+## 1.4.0 — 12.10.2026
+
+- FHIR ersetzt APS als Standardquelle. APS bleibt ausdrücklich aktivierbar; GDT verwendet unverändert die echte Patientennummer.
+- T2med-Browserstart mit Query (`?`) und Fragment (`#`), Statusseite mit Fortschritt, Bestandszahl, Alter und Fehlern.
+- Serverseitige Linux-Binary mit eingebettetem Demo-API-Key; kurzlebiger Bearer-Token ausschließlich über Arbeitsspeicher und stdin.
+- Vollständiger paginierter Import, atomarer SQLite-Bestand, Schutz vor parallelen Importen und Erhalt des bisherigen Bestands bei Fehlern.
+- Mehrfachtreffer bleiben getrennt; fehlende Patientennummer sperrt den Aktenaufruf. Nicht zuordenbare Telefonwerte werden gezählt.
+
 ## 1.3.6 – 12.10.2026
 
 - Rückrufaufträge mit „Nochmal versuchen“, „Löschen“ und „Liste bereinigen“. Löschen betrifft die Historie; laufende Gespräche und der Schutz vor doppelten Wählaufträgen bleiben erhalten. Wiederholen verwendet die ursprüngliche Rufnummer und Nebenstelle und ist nur nach abgeschlossenem Auftrag und bei freier Nebenstelle möglich.

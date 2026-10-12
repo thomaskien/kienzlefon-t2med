@@ -2,6 +2,7 @@
   "name": "thomaskien/kienzlefon-t2med",
   "description": "Zentrale AMI/APS-Middleware mit T2med-GDT-Übergabe",
   "type": "project",
+  "license": "MIT",
   "require": {
     "php": ">=8.2",
     "ext-json": "*",

@@ -144,6 +144,7 @@ class MiddlewareIntegration(unittest.TestCase):
         config['http']['listen'] = f'127.0.0.1:{port}'
         config['http']['public_url'] = cls.url
         config['ami'].update(host='127.0.0.1', port=cls.ami.server_address[1], username='mock', secret='mock-secret')
+        config['patients']['provider'] = 'aps'
         config['aps'].update(url=f'https://127.0.0.1:{cls.aps.server_port}', username='test', password='', tls_verify=False)
         config['gdt']['root'] = str(cls.share)
         config['clients']['empfang-2'] = {'label': 'Empfang 2', 'extension': '202', 'directory': 'empfang-2'}
@@ -291,9 +292,9 @@ class MiddlewareIntegration(unittest.TestCase):
                 self.assertEqual(len(self.aps.requests), after_first)
 
     def test_02_version_is_available_without_patient_lookup(self):
-        self.assertEqual(self.request('/api/v1/bootstrap')[1]['version'], '1.3.6')
+        self.assertEqual(self.request('/api/v1/bootstrap')[1]['version'], '1.4.3')
         self.assertEqual(self.request('/api/v1/bootstrap')[1]['author'], 'Dr. Thomas Kienzle')
-        self.assertEqual(self.request('/healthz')[1]['version'], '1.3.6')
+        self.assertEqual(self.request('/healthz')[1]['version'], '1.4.3')
 
     def test_03_http_controls_and_read_only_link(self):
         self.assertEqual(self.request('/api/v1/lookup', {'number': '03055501111'}, {'Origin': 'https://foreign.example'})[0], 403)
@@ -336,7 +337,7 @@ class MiddlewareIntegration(unittest.TestCase):
         actions = [a for a in self.ami.actions if a['Action'] == 'Originate']
         self.assertEqual(len(actions), 1)
         self.assertEqual(actions[0]['Context'], 'kienzlefon-click-to-dial')
-        self.assertEqual(actions[0]['CallerID'], '03055508888 <03055508888>')
+        self.assertEqual(actions[0]['CallerID'], '"" <03055508888>')
         source = actions[0]['ChannelId']
         self.ami.send({'Event': 'OriginateResponse', 'ActionID': actions[0]['ActionID'], 'Response': 'Success', 'Uniqueid': source})
         def phase():

@@ -2,7 +2,7 @@
 const $ = id => document.getElementById(id);
 const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
 const labels = {pending:'Patient wird gesucht …', resolved:'Zugeordnet', ambiguous:'Mehrere mögliche Patienten · bitte auswählen', not_found:'Kein Patient gefunden', timeout:'Suche hat zu lange gedauert', error:'Patientensuche derzeit nicht erreichbar', requested:'Auftrag angenommen', ringing_extension:'Nebenstelle klingelt', dialing_target:'Ziel wird gewählt', ringing_target:'Ziel klingelt', connected:'Verbunden', ended:'Beendet', failed:'Nicht verbunden', unknown:'Ergebnis ungewiss · Telefon prüfen', demo:'Demo · kein Anruf ausgelöst'};
-const extensionLabels = {busy:'Im Gespräch',ringing:'Klingelt',idle:'Frei',offline:'Nicht erreichbar',unknown:'Status unbekannt'};
+const extensionLabels = {busy:'BELEGT',ringing:'klingelt',idle:'FREI',offline:'Nicht erreichbar',unknown:'Status unbekannt'};
 const transferLabels = {preparing:'Vermittlung wird vorbereitet',requested:'Vermittlung angefordert',ringing:'Ziel klingelt',consulting:'Rückfrage läuft',completing:'Vermittlung wird abgeschlossen',cancelling:'Rückkehr zum Anrufer läuft',transferred:'Gespräch vermittelt',cancelled:'Zurück beim Anrufer',failed:'Vermittlung fehlgeschlagen',unknown:'Status ungewiss · Telefon prüfen'};
 let token = '', clients = [], demo = false, polling = false, toastTimer, pollTimer, latestSearch = null, latestData = null, pendingDial = null, pendingTransfer = null, dialBusy = false, transferStartBusy = false, compact = true;
 const opening = new Set(), requestIds = new Map(), expanded = new Set(), transferActions = new Set(), transferRequestIds = new Map(), transferControlIds = new Map(), knownTransfers = new Map();
@@ -101,8 +101,8 @@ async function openPatient(lookupId, patient, button) {
 }
 function patientAction(button,lookupId,p,index) {
   button.dataset.action = 'patient'; button.dataset.lookup = lookupId; button.dataset.patientIndex = index;
-  button.disabled = !lookupId || opening.has(`${$('client').value}:${lookupId}:${p.patient_number}`);
-  button.title = `Akte öffnen: ${patientName(p)} · Nr. ${p.patient_number}`;
+  button.disabled = !Number.isInteger(p.patient_number) || !lookupId || opening.has(`${$('client').value}:${lookupId}:${p.patient_number}`);
+  button.title = Number.isInteger(p.patient_number) ? `Akte öffnen: ${patientName(p)} · Nr. ${p.patient_number}` : "Keine eindeutige Patientennummer · Aktenaufruf gesperrt";
 }
 function patientList(lookupId,patients,status) {
   const wrapper = el('div');
@@ -111,7 +111,7 @@ function patientList(lookupId,patients,status) {
   const list = el('div','patient-list');
   patients.forEach((p,index) => {
     const button = el('button','patient'); button.type = 'button'; button.dataset.key = `patient-${index}-${p.patient_number}`;
-    const text = el('span',null,patientName(p)); text.append(el('small',null,`Nr. ${p.patient_number}${p.birth_date ? ' · ' + birthDate(p.birth_date) : ''}`));
+    const text = el('span',null,patientName(p)); text.append(el('small',null,`${p.patient_number == null ? "Patientennummer fehlt · Aktenaufruf gesperrt" : "Nr. " + p.patient_number}${p.birth_date ? ' · ' + birthDate(p.birth_date) : ''}`));
     if (p.address) text.append(el('small',null,p.address));
     button.append(text); patientAction(button,lookupId,p,index); list.append(button);
   });
@@ -236,6 +236,9 @@ function render(data, unreachable = false, syncJobs = true) {
   if (!waiting) { queueNodes.push(el('p','empty',stale ? 'Verbindung wird wiederhergestellt …' : 'Niemand wartet.')); compactWaiting.push(el('p','compact-empty',stale ? 'Anrufstatus nicht verfügbar.' : 'Niemand wartet.')); }
   reconcile($('queues'),queueNodes); reconcile($('compact-waiting'),compactWaiting);
   const conversations = calls.filter(c => c.state !== 'waiting'), currentExtension = clients.find(c => c.id === $('client').value)?.extension;
+  const ownState = stale ? 'unknown' : data.extensions.find(ext => ext.id === currentExtension)?.state || 'unknown';
+  $('compact-own-status').textContent = currentExtension ? (extensionLabels[ownState] || 'Status unbekannt') : '';
+  $('compact-own-status').className = 'extension-status ' + ownState;
   const own = conversations.filter(c => currentExtension && c.extensions.includes(currentExtension)), others = conversations.filter(c => !own.includes(c));
   const allCallsShown = !$('compact-conversations').hidden;
   reconcile($('calls'),conversations.length ? conversations.map(c => callCard(c)) : [el('p','empty',stale ? 'Aktueller Gesprächsstatus nicht verfügbar.' : 'Zurzeit keine Gespräche.')]);
@@ -253,9 +256,9 @@ function render(data, unreachable = false, syncJobs = true) {
   const extNodes = [], compactExtensions = [];
   for (const ext of data.extensions) {
     const state = stale ? 'unknown' : ext.state, status = (extensionLabels[state] || state) + (ext.paused ? ' · Pausiert' : '');
-    const node = el('div','extension ' + state); node.dataset.key = ext.id;
+    const node = el('button','extension ' + state); node.dataset.key = ext.id; extensionAction(node,ext,data);
     const text = el('div'); text.append(el('strong',null,ext.label),el('small',null,status)); node.append(el('div','extension-number',ext.id),text); extNodes.push(node);
-    const small = el('div','compact-extension'); small.dataset.key = ext.id; small.append(el('strong',null,`${ext.id} · ${ext.label}`),el('span',null,status)); compactExtensions.push(small);
+    const small = el('button','compact-extension ' + state); small.dataset.key = ext.id; extensionAction(small,ext,data); small.append(el('strong',null,`${ext.id} · ${ext.label}`),el('span',null,status)); compactExtensions.push(small);
   }
   reconcile($('extensions'),extNodes); reconcile($('compact-extensions'),compactExtensions);
   renderTransfers(stale); updateTransferDialogState();
@@ -263,6 +266,30 @@ function render(data, unreachable = false, syncJobs = true) {
   renderOutgoing();
   const presentKeys = new Set([...own.map(c => `own-${c.id}`),...others.map(c => `all-${c.id}`),...compactWaiting.map(n => n.dataset.key)]);
   for (const key of expanded) if (!presentKeys.has(key)) expanded.delete(key);
+}
+function extensionDialReason(target,data = latestData) {
+  const client = clients.find(c => c.id === $('client').value);
+  if (!client) return 'Zuerst einen Arbeitsplatz wählen.';
+  if (!data || data.stale || !data.ami_connected) return 'Keine aktuellen Telefoniedaten.';
+  if (!data.extensions.some(ext => ext.id === target)) return 'Nebenstelle nicht verfügbar.';
+  if (client.extension === target) return 'Eigene Nebenstelle';
+  if (dialBusy) return 'Wählauftrag wird gesendet.';
+  if (data.calls.some(call => call.extensions.includes(client.extension)) ||
+      data.extensions.some(ext => ext.id === client.extension && ['busy','ringing'].includes(ext.state)) ||
+      (data.outgoing || []).some(call => call.extension === client.extension && !['ended','failed','demo'].includes(call.phase))) return 'Eigene Nebenstelle ist belegt.';
+  return '';
+}
+function extensionAction(button,ext,data) {
+  button.type = 'button'; button.dataset.action = 'extension-dial'; button.dataset.extension = ext.id;
+  const reason = extensionDialReason(ext.id,data);
+  button.disabled = Boolean(reason); button.title = reason || `Nebenstelle ${ext.id} anrufen`;
+  button.setAttribute('aria-label',`Nebenstelle ${ext.id} · ${ext.label} anrufen`);
+}
+async function dialExtension(target) {
+  const reason = extensionDialReason(target);
+  if (reason) { toast(reason,true); return; }
+  const client = selectedClient();
+  await sendDial({client_id:client.id,extension:client.extension,number:target,request_id:uuid()});
 }
 function showTransferError(message = '',source = '') {
   $('transfer-error').textContent = message; $('transfer-error').hidden = !message; $('transfer-error').dataset.source = source;
@@ -341,14 +368,14 @@ async function retryOutgoing(requestId) {
   if (!call || !client || latestData.stale || !latestData.ami_connected || call.client_id !== client.id || !call.can_retry || retriedOutgoing.has(requestId) || call.retried_as) return;
   const key = `${client.id}:${call.request_id}`;
   if (!outgoingRetryIds.has(key)) outgoingRetryIds.set(key,uuid());
-  outgoingActions.add(`retry:${requestId}`); dialBusy = true; $('dial').disabled = true; renderOutgoing();
+  outgoingActions.add(`retry:${requestId}`); dialBusy = true; $('dial').disabled = true; if (latestData) render(latestData);
   try {
     const created = await api(`/api/v1/calls/${encodeURIComponent(call.request_id)}/retry`,{client_id:client.id,request_id:outgoingRetryIds.get(key)});
     retriedOutgoing.add(call.request_id); outgoingRetryIds.delete(key);
     if (created?.request_id && latestData) latestData = {...latestData,outgoing:(latestData.outgoing || []).filter(item => item.request_id !== created.request_id).concat(created)};
     toast(labels[created?.phase] || 'Neuer Rückrufversuch angelegt.'); await poll();
   } catch(e) { toast(e.message,true); }
-  finally { outgoingActions.delete(`retry:${requestId}`); dialBusy = false; $('dial').disabled = false; renderOutgoing(); }
+  finally { outgoingActions.delete(`retry:${requestId}`); dialBusy = false; $('dial').disabled = false; if (latestData) render(latestData); }
 }
 async function dismissOutgoing(requestId) {
   if (outgoingActions.size) return;
@@ -382,27 +409,40 @@ async function poll() {
   catch { render({...latestData,ami_connected:false,stale:true,calls:[],queues:[],extensions:latestData?.extensions || [],outgoing:latestData?.outgoing || [],transfers:latestData?.transfers || []},true); }
   finally { polling = false; pollTimer = setTimeout(poll,document.hidden ? 15000 : 2000); }
 }
-async function search(autoOpen = false) {
+async function search(mode, autoOpen = false) {
   const submit = $('search-form').querySelector('[type=submit]'); submit.disabled = true;
   $('search-results').hidden = false; $('patients').replaceChildren(el('p','muted','Patienten werden gesucht …'));
   try {
-    const result = await api('/api/v1/lookup',{number:$('number').value}); latestSearch = result;
-    $('search-number').textContent = result.number; $('patients').replaceChildren(patientList(result.lookup_id,result.patients,result.status));
+    const input = $('number').value;
+    const result = mode === 'manual'
+      ? await api('/api/v1/patients/search',{query:input})
+      : await api('/api/v1/lookup',{number:input});
+    latestSearch = result;
+    $('search-number').textContent = mode === 'manual' ? result.query : result.number;
+    const patients = patientList(result.lookup_id,result.patients,result.status);
+    if (mode === 'manual' && result.truncated) patients.prepend(el('p','notice warning','Es werden nur die ersten 200 Namenstreffer angezeigt. Bitte den Suchtext präzisieren.'));
+    $('patients').replaceChildren(patients);
     $('search-results').scrollIntoView({block:'start'});
-    if (autoOpen && result.status === 'resolved' && result.patients.length === 1) await openPatient(result.lookup_id,result.patients[0]);
+    if (mode === 'phone' && autoOpen && result.status === 'resolved' && result.patients.length === 1 && Number.isInteger(result.patients[0].patient_number)) await openPatient(result.lookup_id,result.patients[0]);
   } catch(e) { $('patients').replaceChildren(el('p','muted',e.message)); }
   finally { submit.disabled = false; }
 }
+function validDialNumber(value) {
+  const number = value.trim();
+  if (number.length > 80 || /[^0-9+ ().\/-]/.test(number)) return '';
+  return /^\+?[0-9]{3,20}$/.test(number.replace(/[ ().\/-]/g,'')) ? number : '';
+}
 async function sendDial(call) {
-  if (dialBusy) return; dialBusy = true; $('dial').disabled = true; renderOutgoing();
-  try { const result = await api('/api/v1/calls',call); toast(demo ? 'Demo: Kein Telefonat gestartet.' : (labels[result.phase] || 'Rückrufauftrag angenommen.')); await poll(); }
+  if (dialBusy) return; dialBusy = true; $('dial').disabled = true; if (latestData) render(latestData);
+  try { const result = await api('/api/v1/calls',call); toast(demo ? 'Demo: Kein Telefonat gestartet.' : (labels[result.phase] || 'Wählauftrag angenommen.')); await poll(); }
   catch(e) { toast(e.message,true); }
-  finally { dialBusy = false; $('dial').disabled = false; renderOutgoing(); }
+  finally { dialBusy = false; $('dial').disabled = false; if (latestData) render(latestData); }
 }
 async function dial(immediate = false) {
   if (dialBusy || $('dial-dialog').open) return;
+  const number = validDialNumber($('number').value);
+  if (!number) { showTools(); toast('Zum Anrufen bitte eine gültige Telefonnummer eingeben.',true); $('number').focus(); return; }
   let client; try { client = selectedClient(); } catch(e) { showTools(); toast(e.message,true); $('client').focus(); return; }
-  const number = $('number').value.trim(); if (!number) { showTools(); $('number').focus(); return; }
   const call = {client_id:client.id,extension:client.extension,number,request_id:uuid()};
   if (immediate) { await sendDial(call); return; }
   pendingDial = call; $('dial-description').textContent = `Zuerst klingelt ${client.label} (${client.extension}). Nach dem Abheben wird ${number} gewählt.`;
@@ -414,7 +454,7 @@ $('transfer-form').addEventListener('submit',e => e.preventDefault());
 $('transfer-form').addEventListener('change',e => { if (e.target.name === 'target_type') { updateTransferTarget(); showTransferError(); } });
 $('client').addEventListener('change',rememberClient);
 $('setup-os').addEventListener('change',updateSetup);
-$('search-form').addEventListener('submit',e => { e.preventDefault(); search(); });
+$('search-form').addEventListener('submit',e => { e.preventDefault(); search('manual'); });
 $('dial').addEventListener('click',() => dial());
 $('close-search').addEventListener('click',() => $('search-results').hidden = true);
 document.addEventListener('click',e => {
@@ -434,6 +474,7 @@ document.addEventListener('click',e => {
     const result = latestSearch?.lookup_id === button.dataset.lookup ? latestSearch : latestData?.calls.find(c => c.lookup_id === button.dataset.lookup);
     const patient = result?.patients[Number(button.dataset.patientIndex)]; if (patient) openPatient(button.dataset.lookup,patient,button); else toast('Zuordnung nicht mehr aktuell. Bitte erneut suchen.',true);
   }
+  else if (action === 'extension-dial') dialExtension(button.dataset.extension);
   else if (action === 'transfer-open') openTransfer(button.dataset.callId);
   else if (action === 'transfer-close') $('transfer-dialog').close();
   else if (action === 'transfer-start') startTransfer(button.dataset.mode);
@@ -468,7 +509,7 @@ async function boot() {
       if (document.prerendering) await new Promise(resolve => document.addEventListener('prerenderingchange',resolve,{once:true}));
       if (document.hidden) await new Promise(resolve => { const visible = () => { if (!document.hidden) { document.removeEventListener('visibilitychange',visible); resolve(); } }; document.addEventListener('visibilitychange',visible); });
       if (location.pathname === '/waehlen') { if (freshNavigation) await dial(query.get('sofort') === '1'); }
-      else await search(location.pathname === '/patient-oeffnen' && freshNavigation && $('client').value !== '');
+      else await search('phone',location.pathname === '/patient-oeffnen' && freshNavigation && $('client').value !== '');
     }
   } catch(e) { toast(e.message,true); if (!token) { $('connection').textContent = 'Verbindung fehlgeschlagen'; $('compact-connection').className = 'status-dot bad'; $('compact-offline').hidden = false; $('compact-offline').textContent = e.message; document.title = 'Verbindung fehlgeschlagen · kienzlefon'; } }
 }

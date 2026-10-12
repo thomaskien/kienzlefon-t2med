@@ -1,66 +1,48 @@
 # Architektur und Schnittstellen
 
-Zielsystem: Debian 12+, Ubuntu 24.04+ und Raspberry Pi OS Bookworm+ mit PHP 8.2 oder neuer. Ein PHP-CLI-Prozess unter systemd stellt Weboberfläche und API bereit. ReactPHP hält AMI dauerhaft offen und fragt APS asynchron ab. Keine Datenbank; Anrufzustand, Lookup-Cache und kurzlebige Auftrags-IDs liegen im Arbeitsspeicher. APS-/AMI-Zugangsdaten liegen nur in der geschützten Serverkonfiguration außerhalb des GDT-Shares.
+Ein PHP-CLI-Prozess unter systemd liefert Weboberfläche und API und hält AMI über ReactPHP offen. Standardquelle ist ein persistenter SQLite-Patientenbestand; die Go-Binary `libexec/fhir-importer` erneuert ihn nach einem T2med-Aufruf atomar. APS-Abfragen laufen nur im ausdrücklich konfigurierten Altbetrieb. Anrufzustand, Suchindex, Lookup-Cache und Auftrags-IDs liegen im Arbeitsspeicher.
 
-## Laufzeit und Konfiguration
-
-`php bin/server.php --config=/etc/kienzlefon-t2med/config.toml`; Demo: `php bin/server.php --demo --listen=127.0.0.1:8765`. Schema siehe `config.example.toml`. Ein leeres APS-Passwort ist ein gültiger Wert. `aps.tls_verify=false` ist eine ausdrücklich konfigurierte Ausnahme für den vorhandenen Testserver. Der Installer bietet sie an; sie wird nie bei einem Fehler automatisch aktiviert. AMI und APS können auf verschiedenen Rechnern laufen.
+Start: `php bin/server.php --config=/etc/kienzlefon-t2med/config.toml`; Demo: `php bin/server.php --demo --listen=127.0.0.1:8765`. Schema: [config.example.toml](../config.example.toml). FHIR-Daten liegen unter `/var/lib/kienzlefon-t2med`, Konfiguration und Secrets unter `/etc/kienzlefon-t2med`, jeweils außerhalb des GDT-Shares.
 
 ## HTTP-Vertrag
 
-Kein Benutzerlogin. Netzwerkbereich und erlaubte Hostnamen sind konfiguriert. Browser-POSTs brauchen denselben Origin und das Headerfeld `X-Kienzlefon-Token` aus `GET /api/v1/bootstrap`. Native lokale Clients holen ebenfalls dieses flüchtige Token; es ist ein Schutz gegen fremde Webseiten, kein Benutzerpasswort. Die Weboberfläche wird vom selben Dienst ausgeliefert. Keine CORS-Freigabe.
+Es gibt keinen Benutzerlogin und keine CORS-Freigabe. Browser-POSTs benötigen gleichen Origin und `X-Kienzlefon-Token` aus dem Bootstrap; native Clients holen dasselbe flüchtige Token. Erlaubte Netze und Hostnamen werden zusätzlich geprüft. Das Token ist kein Benutzerpasswort.
 
-- `GET /api/v1/bootstrap`: `token`, `clients` als Liste `{id,label,extension}`, `demo`, `version`.
-- `GET /healthz`: `status`, `demo`, `version`. CLI-Version: `php bin/server.php --version`.
-- `GET /api/v1/telephony`: `generated_at`, `ami_connected`, `stale`, `calls`, `queues`, `extensions`, `outgoing`, `transfers`. Verbundene Anrufe enthalten `transfer_extensions` mit den aktuell eindeutig zugeordneten, bedienbaren Nebenstellen.
-- `POST /api/v1/calls/{request_id}/retry`: `{client_id, request_id: neue UUID}`. Neuer Wählauftrag mit unveränderter Rufnummer/Nebenstelle des ursprünglichen eigenen Auftrags, nur wenn abgeschlossen und die Nebenstelle frei ist. Pro ursprünglichem Auftrag maximal ein neuer Versuch; wiederholte Requests mit derselben UUID liefern denselben Versuch. Weitere Versuche werden vom neuen Auftrag aus gestartet.
-- `POST /api/v1/calls/{request_id}/dismiss`: `{client_id}`, blendet den eigenen Eintrag aus und liefert `{removed: [id]}`. Keine AMI-Mutation, keine Beendigung des Gesprächs; interne Statusverfolgung und Deduplizierung bleiben erhalten.
-- `POST /api/v1/calls/cleanup`: `{client_id}`, blendet nur eigene abgeschlossene Einträge ohne verbleibende Kanäle aus; `{removed: [id,...]}`. Aktive/ungewisse Aufträge bleiben erhalten. Alle drei Endpunkte verwenden die bestehenden Token-/Origin-Prüfungen.
+| Methode und Route | Vertrag |
+| --- | --- |
+| `GET /api/v1/bootstrap` | Token, Clients `{id,label,extension}`, Demo, Version und Autor. |
+| `GET /healthz` | Dienststatus, Demo und Version. |
+| `GET /api/v1/telephony` | Zeitstempel, AMI-/Stale-Status, Gespräche, Queues, Nebenstellen, Wahl- und Vermittlungsaufträge. |
+| `POST /api/v1/lookup` | Reine Rufnummernsuche `{number}`; liefert Lookup-ID, Status und Patienten. |
+| `POST /api/v1/patients/search` | Lokale Suche `{query}` nach Name, exakter Patientennummer oder Telefon; maximal 200 Namenstreffer, Telefonkandidaten vollständig. |
+| `POST /api/v1/patient-open` | `{client_id,lookup_id,patient_number,request_id}`; validierten Kandidaten atomar als GDT schreiben. |
+| `POST /api/v1/calls` | `{client_id,extension,number,request_id}`; zugeordnete eigene Nebenstelle zuerst, danach Ziel. HTTP 202 bedeutet angenommen, nicht verbunden. |
+| `POST /api/v1/calls/{id}/retry` | Abgeschlossenen eigenen Wahlauftrag mit neuer UUID wiederholen, wenn Nebenstelle frei und Zustand aktuell ist. |
+| `POST /api/v1/calls/{id}/dismiss` | Eigenen Eintrag ausblenden, ohne AMI oder das Gespräch zu verändern. |
+| `POST /api/v1/calls/cleanup` | Nur erledigte eigene Einträge ohne Kanäle ausblenden. |
+| `POST /api/v1/transfers` | `{client_id,call_id,target_type,target,mode,request_id}`; Zielart intern/extern, Modus direkt/Rückfrage. |
+| `POST /api/v1/transfers/{id}/complete`, `/cancel` | Rückfrage nach serverseitiger Zustandsprüfung abschließen oder abbrechen. |
+| `POST /api/v1/fhir/import` | T2med-Kontext, fest konfigurierte Basisadresse, Bearer-Token und UUID an den Importer übergeben. |
+| `GET /api/v1/fhir/status` | Fortschritt, letztes Ergebnis und Bestandszahlen ohne Patienten oder Token. |
 
-- `POST /api/v1/lookup` mit `{number}`: `{lookup_id,number,status,patients}`. Patienten enthalten `patient_number`, `first_name`, `last_name`, `birth_date`, `address`; interne Referenzen bleiben für die Auswahlprüfung im Dienst.
-- `POST /api/v1/patient-open` mit `{client_id,lookup_id,patient_number,request_id}`: ausgewählten Kandidaten als GDT schreiben. Nur zum Lookup gehörende, eindeutig identifizierbare Patientennummern akzeptieren. Eine noch nicht konsumierte Datei atomar durch den neuen Aufruf ersetzen. `request_id` ist eine UUID und dient der Wiederholungserkennung.
-- `POST /api/v1/calls` mit `{client_id,extension,number,request_id}`: Nebenstelle muss zur serverseitigen Client-Zuordnung passen. Erst Nebenstelle, dann Ziel anrufen. HTTP 202 bedeutet angenommen, nicht verbunden.
-- `POST /api/v1/transfers` mit `{client_id,call_id,target_type,target,mode,request_id}`: `target_type` ist `internal` oder `external`, `mode` ist `blind` oder `attended`. Die Middleware ermittelt den eigenen Gesprächskanal selbst. Keine frei übergebenen AMI-Kanalnamen. HTTP 202 liefert den Auftrag samt aktuellem Zustand.
-- `POST /api/v1/transfers/{UUID}/complete` oder `/cancel` mit `{client_id,request_id}`: Rückfrage abschließen oder zum Anrufer zurückkehren, nur wenn die serverseitigen Zustandsmerkmale dies erlauben.
-- `GET /patient-oeffnen?client_id=empfang-1&telefon=…`: Einstiegsseite für den Weblink. Der bloße GET schreibt keine Datei. Die Oberfläche verarbeitet eine aktive Navigation, löst den Lookup aus und bei eindeutigem Treffer den POST; mehrere Kandidaten erfordern Auswahl.
-- `GET /waehlen?client_id=empfang-1&telefon=…`: Einstiegsseite mit Wählbestätigung.
-- `GET /waehlen?client_id=empfang-1&telefon=…&sofort=1`: explizite Direktwahl. Nach frischer Navigation in sichtbarer, nicht vorgerenderter Seite genau einen Anruf-POST auslösen; kein Bestätigungsdialog. Aktionsparameter vor der ersten Netzwerkanfrage aus der Browserhistorie entfernen, damit Reload/Zurück keinen neuen Auftrag erzeugt. Bloßer GET bleibt lesend. Jede erneute bewusst geöffnete vollständige Direktwahl-URL ist ein neuer Wahlauftrag.
-- `expected_extension` prüft bei Client-Wähl-URLs zusätzlich die lokal registrierte Nebenstelle gegen Bootstrap; bei Abweichung kein automatischer Wahlauftrag.
-- `/?view=compact&client_id=empfang-1` und `/?view=full&client_id=empfang-1` wählen die Ansicht. Ohne expliziten Parameter gilt die gespeicherte Ansicht, sonst Kompakt.
+`GET /waehlen`, `/patient-oeffnen` und `/telefonverzeichnis-aktualisieren.php` sind Browser-Einstiege. Der GET selbst mutiert nichts; JavaScript entfernt Aktionsparameter aus der Historie und sendet nach Prüfung höchstens einen POST. `/?view=compact|full&client_id=…` wählt Ansicht und Arbeitsplatz.
 
-Status der Auflösung: `pending`, `resolved`, `ambiguous`, `not_found`, `timeout`, `error`. Allgemeine APS-Suche kann Patientennummern finden; verdächtige Zahlentreffer verlangen Auswahl und werden nicht automatisch als Telefonname verwendet. Verschiedene Patienten mit identischen Namen bleiben getrennt. Das API liefert Geburtsdaten unverändert. Die Oberfläche formatiert kalendergültige, eindeutig erkennbare Werte in YYYYMMDD, DDMMYYYY oder YYYY-MM-DD als DD.MM.YYYY; unklare Werte bleiben unverändert.
+Lookup-Status sind `pending`, `resolved`, `ambiguous`, `not_found`, `timeout` und `error`. Mehrere Patienten bleiben getrennt. GDT darf nur die echte Patientennummer aus dem geprüften Lookup verwenden; nie die FHIR-ID.
 
-## AMI und APS
+## AMI und Telefonie
 
-APS: `POST /aps/rest/praxis/patient/suche/find`, Basic Auth, JSON `{suchmaske: <Rufnummer>, ignoreSichtbarkeit: false}`. Antwort ist eine Liste mit `nummer`, `vorname`, `nachname`, `geburtsdatum`, `adresse` und vollständigem `ref`. Keine weiteren Stammdaten-Endpunkte voraussetzen.
+Bei AMI-Verbindung und periodisch werden `CoreShowChannels` und `QueueStatus` abgeglichen; Ereignisse während des Snapshots werden danach angewendet. Ausfall oder unvollständiger Snapshot setzt `stale`. Logische Anrufe, Kanäle, Brücken und Local-Kanalpaare bleiben getrennt.
 
-APS-Suchvarianten für den konfigurierten Ländercode: nationale führende Null,
-`+`-Format, `00`-Format und Landeskennzahl ohne Präfix. Alle verwenden denselben
-Cache-Schlüssel; Treffer über mehrere Schreibweisen werden per Patienten-ID und
-Referenz zusammengeführt. Kurze lokale Nummern werden nicht allein wegen der
-Ziffernfolge `49` international interpretiert (mindestens sieben weitere Ziffern).
-Die generische Normalisierung für die Wahl bleibt davon getrennt.
+Für eingehende Lookup-Anfragen setzt die Middleware nach bestätigten `Setvar`-Aktionen `LOOKUP_RESULT_ID`, `LOOKUP_NAME`, `LOOKUP_STATUS` und zuletzt `LOOKUP_DONE=1`. Nur ein eindeutiger Patient liefert den echten Namen; bei Mehrdeutigkeit bleibt `LOOKUP_NAME` leer. Asterisk wartet höchstens eine Sekunde und übernimmt nur rechtzeitige Ergebnisse.
 
-AMI: `Events: on`; Snapshots `CoreShowChannels` und `QueueStatus` bei Verbindung sowie periodisch. Währenddessen Events puffern und anschließend auf den vollständigen Snapshot anwenden. Verbindungsausfall oder unvollständiger Snapshot bedeutet `stale`. Kanäle und logische Anrufe unterscheiden; Brücken und Local-Kanalpaare berücksichtigen, getrennte Gesprächsbrücken trotz gleichem Linkedid getrennt halten. Warteschlangeneinträge referenzieren die Anruf-ID. Gesprächsdauer nur bei beobachteter Verbindung, sonst unbekannt; Kanalalter gesondert.
+Click-to-Dial verwendet `Originate` zuerst zu `PJSIP/<extension>` und wählt das Ziel nach Annahme. Es wird weder ein künstlicher Rückrufname noch die Zielnummer als Anzeigename gesetzt. UUIDs verhindern versehentliche Wiederholung; ein ungewisses Ergebnis wird nicht automatisch erneut gesendet.
 
-Lookup-UserEvent: `KienzlefonLookupRequest`, `SchemaVersion: 1`, `RequestId`, `SourceChannel`, `SourceUniqueid`, `SourceLinkedid`, `Number`, `BudgetMs: 1000`. Middleware setzt per bestätigtem `Setvar` nacheinander `LOOKUP_RESULT_ID`, `LOOKUP_NAME`, `LOOKUP_STATUS`, zuletzt `LOOKUP_DONE=1`. Nur temporäre Variablen auf dem jeweiligen Kanal, niemals `CALLERID`. Asterisk selbst begrenzt die Wartezeit auf eine Sekunde und übernimmt ausschließlich rechtzeitige Ergebnisse. Ende über `KienzlefonLookupFinished` mit `RequestId`, `SourceUniqueid`, `Status`, `Applied`.
+Konfigurierte interne Ziele nutzen `Originate` mit `Application: Dial` und `Data: PJSIP/<Ziel>,<Rufzeit>,f(<eigene Nebenstelle>)`; externe Ziele bleiben im konfigurierten Click-to-Dial-Kontext. Die eigene Nebenstelle wird als Anrufernummer an das interne Ziel übergeben ([Asterisk Dial](https://docs.asterisk.org/Asterisk_20_Documentation/API_Documentation/Dialplan_Applications/Dial/)). Eigene Zielnebenstelle, belegter eigener Anschluss und `stale` werden abgewiesen. Vermittlung bindet sich serverseitig an das eigene laufende Gespräch; frei übergebene AMI-Kanalnamen sind unzulässig.
 
-Click-to-Dial: `Originate` mit `PJSIP/<extension>`, `Context` aus Konfiguration, `Exten` als normalisierte Zielnummer, `Priority: 1`, `Async: true`, `Timeout: 20000`, `EarlyMedia: false`, eigenem `ChannelId`. `CallerID` enthält die Zielnummer als Anzeigename und Nummer (`03055501111 <03055501111>`), keine dauerhafte Personenbezeichnung wie „Rueckruf“. Variablen `__KF_C2D_ID`, `__KF_C2D_CLIENT`, `__KF_C2D_EXTENSION`. Dialplan meldet `KienzlefonClickToDialProgress` mit `RequestId`, `Phase: dialing_target`, `SourceUniqueid`. Eigentliche Verbindung erst nach Antwort des zweiten Rufabschnitts und Brücke melden. Kein automatisches Wiederholen bei ungewissem Ergebnis.
+## FHIR, APS und GDT
 
-## Vermittlungszustand
+Der FHIR-Importer liest paginiert `GET /Patient`. Nur ein vollständiger validierter Lauf ersetzt die SQLite-Datei. Der Bearer-Token gelangt über stdin zum Kindprozess; der eingebettete Demo-API-Key erlaubt 100 Requests. Der TEMP-Suchindex normalisiert Namen und Rufnummern, ergänzt den Ortsnummern-Endvergleich und wird beim Dienststart aus Originalwerten aufgebaut.
 
-`transfers` enthält `request_id`, `client_id`, `call_id`, `extension`, `target_type`, `target`, `mode`, `phase`, `message`, `created_at`, `can_cancel`, `can_complete`. Phasen: `preparing`, `requested`, `ringing`, `consulting`, `completing`, `cancelling`, `transferred`, `cancelled`, `failed`, `unknown`. Die Ansicht bleibt auch bei einer geänderten logischen Gesprächs-ID verfügbar. Serverseitig werden ursprüngliche Uniqueids, die tatsächliche Zielverbindung und Local-Zwischenkanäle verfolgt.
+APS-Altbetrieb: `POST /aps/rest/praxis/patient/suche/find` mit Basic Auth und `{suchmaske, ignoreSichtbarkeit:false}`. Es werden keine weiteren APS-Stammdaten-Endpunkte vorausgesetzt.
 
-Start- und Steueraufträge verwenden UUIDs zur Wiederholungserkennung. Neue UUIDs sind neue bewusste Bedienaktionen. Ein ungewisser Auftrag wird nicht automatisch erneut gesendet und blockiert weitere Vermittlung desselben laufenden Gesprächs. Bestätigter AMI-Auftrag und bestätigte Gesprächsverbindung sind getrennt. Details zur nötigen Asterisk-Einrichtung: [Transfer-Übergabe](TRANSFER_HANDOFF.md).
-
-## GDT und Clients
-
-Share `kienzlefon-GDT`, Guest ohne Anmeldung. Pro Client ein vorab konfiguriertes Unterverzeichnis, darin `AUFRUFi.gdt`. ID-only Satztyp 6301 mit korrekten Byte-Längen und CRLF. Temporäre Datei auf demselben Dateisystem und atomare Veröffentlichung per Rename; eine vorhandene Importdatei wird vollständig ersetzt. T2med überwacht pro Arbeitsplatz den zugehörigen SMB-Pfad über die Kalenderanbindung.
-
-Linux-Installer installiert Dienst, fragt Verbindungsdaten verdeckt ab, legt geschützte Konfiguration an und ergänzt Samba additiv. Bestehende Shares/Benutzer/Globaleinstellungen erhalten. Falls ein bestehender Samba-Server Guest nicht unterstützt, keine globale Authentifizierung eigenmächtig ändern; Konflikt vor Änderungen melden und dokumentierte separate Freigabe ermöglichen.
-
-Lokale Installer für Windows/macOS/Linux speichern Middleware-URL, Client-ID und Nebenstelle. Sie registrieren `tel:` und `callto:`. Nummern strikt prüfen, keine Ausführung von URI-Inhalt als Shellcode. Auswahl des Standardprogramms bleibt bei vom Betriebssystem verwalteten Benutzereinstellungen. Keine APS-/AMI-Zugangsdaten auf Arbeitsplätzen.
-
-Rückrufhistorie: `outgoing` liefert zusätzlich `can_retry`, `can_delete`, `can_cleanup` und gegebenenfalls `retried_as`. Ausgeblendete Aufträge fehlen in der Antwort, werden intern aber weiter verfolgt. Erst zehn Minuten nach Abschluss werden die Datensätze freigegeben. Nach erfolgreichem Bestandsabgleich werden alte Aufträge ohne Quell-, Ziel- oder zugeordnete Local-Kanäle als beendet/nicht verbunden abgeschlossen. Der Snapshot muss nach Ablauf des Originate-Timeouts plus fünf Sekunden begonnen haben; während AMI-Ausfall oder laufendem Snapshot findet kein solcher Abschluss statt. Aktive Aufträge sperren weitere Wahlversuche auch über zehn Minuten hinaus.
-
-Bootstrap liefert `version` und `author` aus `Version.php` für die Anzeige in beiden Footern.
+Pro Client veröffentlicht die Middleware `AUFRUFi.gdt` als ID-only-Satztyp 6301 mit CRLF und korrekten Byte-Längen. Eine temporäre Datei auf demselben Dateisystem wird atomar umbenannt und ersetzt die vorhandene Importdatei. Lokale Clients speichern nur Middleware-URL, Client-ID und Nebenstelle und registrieren `tel:` sowie `callto:`; APS-/AMI-Zugangsdaten bleiben auf dem Server.

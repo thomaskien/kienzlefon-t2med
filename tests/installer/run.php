@@ -40,6 +40,7 @@ function answers(): array
 {
     return [
         'public_url' => 'http://middleware.example:8765',
+        'patient_provider'=>'aps',
         'listen_port' => 8765,
         'aps_host' => 'aps.example', 'aps_port' => '16567', 'aps_username' => 'test-user', 'aps_password' => '',
         'aps_tls' => true, 'aps_tls_verify' => false, 'aps_ca_file' => '',
@@ -104,6 +105,14 @@ $cleared = buildConfig($explicitEmpty, $existingWithSecret);
 check($cleared['aps']['password'] === '' && $cleared['ami']['secret'] === '', 'Secrets können explizit leer gesetzt werden');
 
 $example = json_decode(file_get_contents(dirname(__DIR__, 2) . '/config.example.json'), true, 512, JSON_THROW_ON_ERROR);
+$fhirAnswers = answers();
+foreach (array_keys($fhirAnswers) as $key) if (str_starts_with($key, 'aps_')) unset($fhirAnswers[$key]);
+$fhirAnswers += ['fhir_base_url'=>'https://fhir.example:16567/aps/fhir/api/r4','fhir_tls_verify'=>true,'fhir_ca_file'=>'','fhir_local_area_code'=>'030'];
+$fhirAnswers['patient_provider'] = 'fhir';
+$fhirConfig = buildConfig($fhirAnswers, $existingWithSecret);
+check($fhirConfig['patients']['provider'] === 'fhir', 'FHIR wird ohne APS-Eingaben aktiviert');
+check($fhirConfig['aps']['password'] === 'retained-password', 'deaktivierter APS-Zugang bleibt erhalten');
+check($fhirConfig['fhir']['base_url'] === $fhirAnswers['fhir_base_url'] && $fhirConfig['fhir']['local_area_code'] === '030', 'FHIR-Ziel und ausdrückliche Ortsvorwahl werden übernommen');
 $validated = validateConfig($example);
 check(array_keys($validated) === array_keys($example), 'erzeugtes Configschema hat exakt die Beispiel-Hauptabschnitte');
 check(array_keys($validated['aps']) === array_keys($example['aps']), 'APS-Schema entspricht exakt dem Beispiel');

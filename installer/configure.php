@@ -96,6 +96,13 @@ function webUrl(mixed $value, string $name): string
 /** @param array<string,mixed> $answers @param array<string,mixed>|null $existing @return array<string,mixed> */
 function buildConfig(array $answers, ?array $existing = null): array
 {
+    $defaults = Config::read(dirname(__DIR__) . '/config.example.json');
+    $provider = $answers['patient_provider'] ?? $existing['patients']['provider'] ?? 'fhir';
+    if ($provider === 'fhir') {
+        $legacy = $existing['aps'] ?? $defaults['aps'];
+        $url = parse_url($legacy['url']);
+        $answers += ['aps_host'=>$url['host'], 'aps_port'=>$url['port'] ?? 16567, 'aps_username'=>$legacy['username'], 'aps_tls'=>true, 'aps_tls_verify'=>$legacy['tls_verify'], 'aps_ca_file'=>$legacy['ca_file']];
+    }
     $required = ['public_url', 'listen_port', 'aps_host', 'aps_port', 'aps_username', 'aps_tls', 'aps_tls_verify', 'ami_host', 'ami_port', 'ami_username', 'ami_tls', 'gdt_root', 'clients'];
     foreach ($required as $key) {
         if (!array_key_exists($key, $answers)) {
@@ -217,6 +224,11 @@ function buildConfig(array $answers, ?array $existing = null): array
         foreach (['timeout_seconds','cache_seconds'] as $key) $config['aps'][$key] = $existing['aps'][$key];
         foreach (['filename','sender','receiver'] as $key) $config['gdt'][$key] = $existing['gdt'][$key];
     }
+    $config['patients'] = ['provider'=>$provider];
+    $config['fhir'] = array_replace($defaults['fhir'], $existing['fhir'] ?? []);
+    foreach (['base_url','tls_verify','ca_file','local_area_code'] as $field) {
+        if (array_key_exists('fhir_' . $field, $answers)) $config['fhir'][$field] = $answers['fhir_' . $field];
+    }
     return validateConfig($config);
 }
 
@@ -229,6 +241,8 @@ function validateConfig(array $config): array
         'aps' => ['url', 'username', 'password', 'tls_verify', 'ca_file', 'timeout_seconds', 'cache_seconds'],
         'telephony' => ['queues', 'extensions', 'country_code', 'originate_context', 'originate_timeout_ms', 'transfer_context'],
         'gdt' => ['root', 'filename', 'sender', 'receiver'],
+        'patients' => ['provider'],
+        'fhir' => ['base_url','binary','database','tls_verify','ca_file','timeout_seconds','max_pages','max_patients','local_area_code','cache_seconds'],
     ];
     $expectedTop = array_merge(array_keys($schema), ['clients']);
     $actualTop = array_keys($config);
@@ -310,14 +324,29 @@ function interactiveAnswers(?array $existing): array
     $apsUrl = isset($aps['url']) ? parse_url((string)$aps['url']) : [];
     $ami = $existing['ami'] ?? [];
     $answers = [
-        'public_url' => prompt('Middleware publicURL', (string)($existing['http']['public_url'] ?? 'http://localhost:8765')),
-        'listen_port' => prompt('Middleware Listen-Port', isset($existing['http']['listen']) && preg_match('/:(\d+)$/', (string)$existing['http']['listen'], $listen) ? $listen[1] : '8765'),
-        'aps_host' => prompt('APS-Host', (string)($apsUrl['host'] ?? 'localhost')),
-        'aps_port' => prompt('APS-Port', (string)($apsUrl['port'] ?? 16567)),
-        'aps_username' => prompt('APS-Benutzer', (string)($aps['username'] ?? '')),
-        'aps_tls' => true,
-        'aps_tls_verify' => !yesNoPrompt('Ausnahme: APS-TLS-Zertifikat NICHT prüfen', isset($aps['tls_verify']) && $aps['tls_verify'] === false),
-        'aps_ca_file' => prompt('APS CA-Datei (leer = System-CA)', (string)($aps['ca_file'] ?? '')),
+        'public_url' => prompt('Middleware publicURL', (string)($existing['http']['public_url'] ?? 'http://localhost:8766')),
+        'listen_port' => prompt('Middleware Listen-Port', isset($existing['http']['listen']) && preg_match('/:(\d+)$/', (string)$existing['http']['listen'], $listen) ? $listen[1] : '8766'),
+        'patient_provider' => prompt('Patientenquelle (fhir oder aps)', (string)($existing['patients']['provider'] ?? 'fhir')),
+    ];
+    if ($answers['patient_provider'] === 'aps') {
+        $answers += [
+            'aps_host' => prompt('APS-Host', (string)($apsUrl['host'] ?? 'localhost')),
+            'aps_port' => prompt('APS-Port', (string)($apsUrl['port'] ?? 16567)),
+            'aps_username' => prompt('APS-Benutzer', (string)($aps['username'] ?? '')),
+            'aps_tls' => true,
+            'aps_tls_verify' => !yesNoPrompt('Ausnahme: APS-TLS-Zertifikat NICHT prüfen', isset($aps['tls_verify']) && $aps['tls_verify'] === false),
+            'aps_ca_file' => prompt('APS CA-Datei (leer = System-CA)', (string)($aps['ca_file'] ?? '')),
+        ];
+    } elseif ($answers['patient_provider'] === 'fhir') {
+        $fhir = $existing['fhir'] ?? [];
+        $answers += [
+            'fhir_base_url'=>prompt('FHIR-Basisadresse', (string)($fhir['base_url'] ?? 'https://t2med.example:16567/aps/fhir/api/r4')),
+            'fhir_tls_verify'=>!yesNoPrompt('Ausnahme: FHIR-TLS-Zertifikat NICHT prüfen', ($fhir['tls_verify'] ?? true) === false),
+            'fhir_ca_file'=>prompt('FHIR CA-Datei (leer = System-CA)', (string)($fhir['ca_file'] ?? '')),
+            'fhir_local_area_code'=>prompt('Ortsvorwahl für lokale Telefonwerte (leer = keine Ergänzung)', (string)($fhir['local_area_code'] ?? '')),
+        ];
+    } else throw new ConfigurationError('Patientenquelle muss fhir oder aps sein.');
+    $answers += [
         'ami_host' => prompt('AMI-Host', (string)($ami['host'] ?? '127.0.0.1')),
         'ami_port' => prompt('AMI-Port', (string)($ami['port'] ?? 5038)),
         'ami_username' => prompt('AMI-Benutzer', (string)($ami['username'] ?? 'kienzlefon-middleware')),
@@ -325,14 +354,10 @@ function interactiveAnswers(?array $existing): array
         'ami_ca_file' => prompt('AMI CA-Datei (leer = System-CA)', (string)($ami['ca_file'] ?? '')),
         'gdt_root' => prompt('Absoluter GDT-Root', (string)($existing['gdt']['root'] ?? '/srv/kienzlefon-GDT')),
     ];
-    if ($existing !== null && yesNoPrompt('Vorhandenes APS-Passwort beibehalten', true)) {
-        // Deliberately omit: buildConfig retains it. Choosing "nein" permits explicitly empty.
-    } else {
+    if ($answers['patient_provider'] === 'aps' && !($existing !== null && yesNoPrompt('Vorhandenes APS-Passwort beibehalten', true))) {
         $answers['aps_password'] = prompt('APS-Passwort (leer ist gültig)', '', true);
     }
-    if ($existing !== null && yesNoPrompt('Vorhandenes AMI-Secret beibehalten', true)) {
-        // Deliberately omit: buildConfig retains it.
-    } else {
+    if (!($existing !== null && yesNoPrompt('Vorhandenes AMI-Secret beibehalten', true))) {
         $answers['ami_secret'] = prompt('AMI-Secret', '', true);
     }
     $answers['clients'] = [];

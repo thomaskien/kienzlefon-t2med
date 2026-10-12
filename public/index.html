@@ -7,7 +7,7 @@
   <header class="compact-head"><strong id="compact-extension" title="Eigene Nebenstelle">–</strong><span id="compact-counts">Verbinde …</span><span id="compact-demo" class="demo-tag" hidden>DEMO</span><span id="compact-connection" class="status-dot" role="status" aria-label="Verbinde …" title="Verbinde …"></span><button class="icon-button" id="menu-toggle" data-action="tools" aria-label="Suche, Wählen und Arbeitsplatz" aria-expanded="false" aria-controls="tools">☰</button></header>
   <div id="compact-offline" class="compact-warning" hidden>Keine aktuellen Telefoniedaten</div>
   <section id="compact-talks" aria-labelledby="compact-talks-title">
-    <h2 id="compact-talks-title" class="compact-section-title">Gespräche</h2>
+    <h2 id="compact-talks-title" class="compact-section-title" aria-label="Gespräche">Gespräche <span id="compact-own-status" class="extension-status"></span></h2>
     <div id="compact-own" aria-label="Eigene Gespräche"></div>
     <div id="compact-conversations" aria-label="Weitere laufende Gespräche" hidden><div id="compact-all-calls"></div></div>
   </section>
@@ -15,16 +15,17 @@
     <h2 id="compact-queue-title" class="compact-section-title">Warteschlange</h2>
     <div id="compact-waiting" aria-label="Wartende Anrufe"><p class="compact-empty">Anrufe werden geladen …</p></div>
   </section>
-  <footer class="compact-footer"><div class="compact-foot"><button id="conversations-toggle" data-action="conversations" aria-expanded="false" aria-controls="compact-conversations">Alle Gespräche ▾</button><button id="more-toggle" data-action="more" aria-expanded="false" aria-controls="compact-more">Nebenstellen</button><button data-action="full">Übersicht ↗</button></div><div class="compact-credit"><span id="compact-footer-version">v…</span> · von <span id="compact-footer-author">…</span></div></footer>
   <div id="compact-more" hidden><div id="compact-extensions"></div></div>
+  <footer class="compact-footer"><div class="compact-foot"><button id="conversations-toggle" data-action="conversations" aria-expanded="false" aria-controls="compact-conversations">Alle Gespräche ▾</button><button id="more-toggle" data-action="more" aria-expanded="false" aria-controls="compact-more">Nebenstellen</button><button data-action="full">Übersicht ↗</button></div><div class="compact-credit">kienzlefon <span id="compact-footer-version">v…</span> von <span id="compact-footer-author">…</span></div></footer>
 </section>
 <div class="full-only heading"><div><p class="eyebrow">PRAXISTELEFONIE</p><h1>Telefonieübersicht</h1></div></div>
 <div id="demo" class="notice full-only" hidden>Demo mit fiktiven Patientendaten. Aktenaufrufe und Telefonate werden nur simuliert.</div>
-<div id="offline" class="notice warning full-only" hidden>Telefoniedaten sind derzeit nicht aktuell. Die Rufnummernsuche bleibt verfügbar.</div>
+<div id="offline" class="notice warning full-only" hidden>Telefoniedaten sind derzeit nicht aktuell. Die Patientensuche bleibt verfügbar.</div>
 <section id="tools" class="tools-panel" aria-label="Suche und Einstellungen">
   <div class="tools-head"><label class="workplace">Arbeitsplatz<select id="client"><option value="">Arbeitsplatz wählen</option></select></label><button class="text-button compact-only" data-action="tools" aria-label="Menü schließen">Schließen</button></div>
-  <section class="search-panel" aria-labelledby="search-title"><div><h2 id="search-title">Suchen &amp; wählen</h2></div><form id="search-form"><label class="sr-only" for="number">Telefonnummer</label><input id="number" name="number" type="tel" autocomplete="off" placeholder="Telefonnummer" required><button type="submit" class="primary">Patient suchen</button><button type="button" id="dial" class="secondary">Anrufen</button></form></section>
+  <section class="search-panel" aria-labelledby="search-title"><div><h2 id="search-title">Suchen &amp; wählen</h2></div><form id="search-form"><label class="sr-only" for="number">Name, Patientennummer oder Telefonnummer</label><input id="number" name="number" type="text" autocomplete="off" placeholder="Name, Patienten- oder Telefonnummer" aria-label="Name, Patientennummer oder Telefonnummer" required><button type="submit" class="primary">Patient suchen</button><button type="button" id="dial" class="secondary">Anrufen</button></form></section>
   <div class="tools-links"><button class="text-button" data-action="popup">Eigenes Kompaktfenster ↗</button><button class="text-button" data-action="setup" aria-controls="client-setup" aria-expanded="false">Telefonie-App einrichten</button></div>
+  <p><a href="/telefonverzeichnis-aktualisieren.php">Telefonverzeichnis · letzter Abgleich</a></p>
   <p id="app-version" class="muted" hidden></p>
   <section id="client-setup" class="setup-panel" hidden><h2>Telefonie-App einrichten</h2><p>Verknüpft <code>tel:</code> und <code>callto:</code> mit diesem Arbeitsplatz. Python 3.9 oder neuer wird benötigt.</p><p id="setup-workplace"></p><p><a href="https://github.com/thomaskien/kienzlefon-t2med/archive/refs/heads/main.zip" target="_blank" rel="noopener noreferrer">Installationsdateien herunterladen</a></p><p>ZIP entpacken und im Projektordner den passenden Befehl ausführen:</p><label for="setup-os">Betriebssystem</label><select id="setup-os"><option value="windows">Windows · PowerShell</option><option value="macos">macOS · Terminal</option><option value="linux">Linux · Terminal</option></select><pre id="setup-command"></pre><p id="setup-hint"></p><a href="https://github.com/thomaskien/kienzlefon-t2med/blob/main/docs/CLIENTS.md" target="_blank" rel="noopener noreferrer">Anleitung und Standard-App-Auswahl ↗</a></section>
   <section id="outgoing-panel" class="panel" hidden><div class="section-head"><h2>Rückrufaufträge</h2><button id="outgoing-cleanup" class="text-button" data-action="outgoing-cleanup" type="button" title="Entfernt erledigte Rückrufaufträge dieses Arbeitsplatzes">Liste bereinigen</button></div><div id="outgoing"></div></section>
@@ -36,7 +37,7 @@
 <section class="extensions-panel"><div class="section-head"><h2>Nebenstellen</h2><span class="muted">Status der aktuellen Telefonie</span></div><div id="extensions" class="extensions"></div></section>
 <footer class="full-footer"><span>kienzlefon × T2med</span><span><span id="footer-version">v…</span> · von <span id="footer-author">…</span></span><span id="footer-client">Arbeitsplatz noch nicht zugeordnet</span></footer></div>
 </main><div id="toast" class="toast" role="status" hidden></div>
-<dialog id="dial-dialog" aria-labelledby="dial-title"><form method="dialog"><p class="eyebrow">RÜCKRUF</p><h2 id="dial-title">Anruf starten?</h2><p id="dial-description"></p><div class="dialog-actions"><button value="cancel" class="secondary">Abbrechen</button><button value="call" class="primary">Jetzt anrufen</button></div></form></dialog>
+<dialog id="dial-dialog" aria-labelledby="dial-title"><form method="dialog"><p class="eyebrow">WAHLHILFE</p><h2 id="dial-title">Anruf starten?</h2><p id="dial-description"></p><div class="dialog-actions"><button value="cancel" class="secondary">Abbrechen</button><button value="call" class="primary">Jetzt anrufen</button></div></form></dialog>
 <dialog id="transfer-dialog" aria-labelledby="transfer-title"><form id="transfer-form">
   <p class="eyebrow">GESPRÄCH VERMITTELN</p><h2 id="transfer-title">Ziel auswählen</h2><p id="transfer-call"></p>
   <fieldset class="transfer-targets"><legend class="sr-only">Zielart</legend><label><input type="radio" name="target_type" value="internal" checked> Nebenstelle</label><label><input type="radio" name="target_type" value="external"> Externe Rufnummer</label></fieldset>

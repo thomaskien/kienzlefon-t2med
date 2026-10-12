@@ -12,6 +12,8 @@ ExecStart=/usr/bin/php -d pcre.jit=0 /opt/kienzlefon-t2med/bin/server.php --conf
 Restart=on-failure
 RestartSec=3s
 UMask=0007
+StateDirectory=kienzlefon-t2med
+StateDirectoryMode=0700
 RuntimeDirectory=kienzlefon-t2med
 RuntimeDirectoryMode=0750
 NoNewPrivileges=yes
