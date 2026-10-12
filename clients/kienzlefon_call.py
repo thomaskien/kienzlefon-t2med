@@ -5,14 +5,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import stat
+import subprocess
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+import webbrowser
 from pathlib import Path
 from typing import Any
 
@@ -158,6 +161,65 @@ def verify_bootstrap(config: dict[str, str], opener: Any, timeout: float) -> str
     return body["token"]
 
 
+def call_browser_url(config: dict[str, str], number: str) -> str:
+    number = normalize_number(number)
+    query = urllib.parse.urlencode(
+        {
+            "client_id": config["client_id"],
+            "telefon": number,
+            "expected_extension": config["extension"],
+            "view": "compact",
+        }
+    )
+    return config["url"] + "/waehlen?" + query
+
+
+def monitor_browser_url(config: dict[str, str]) -> str:
+    query = urllib.parse.urlencode({"view": "compact", "client_id": config["client_id"]})
+    return config["url"] + "/?" + query
+
+
+def open_verified_url(
+    config: dict[str, str],
+    target: str,
+    opener: Any | None = None,
+    timeout: float = DEFAULT_TIMEOUT,
+    browser_open: Any | None = None,
+) -> None:
+    opener = opener or urllib.request.build_opener(NoRedirect())
+    verify_bootstrap(config, opener, timeout)
+    launch = browser_open or webbrowser.open
+    try:
+        opened = launch(target, new=2, autoraise=True)
+    except (OSError, webbrowser.Error) as exc:
+        raise ClientError(f"Browser konnte nicht gestartet werden: {exc}") from exc
+    if not opened:
+        raise ClientError("Browser konnte nicht gestartet werden.")
+
+
+def open_call_in_browser(
+    config: dict[str, str],
+    number: str,
+    opener: Any | None = None,
+    timeout: float = DEFAULT_TIMEOUT,
+    browser_open: Any | None = None,
+) -> str:
+    target = call_browser_url(config, number)
+    open_verified_url(config, target, opener=opener, timeout=timeout, browser_open=browser_open)
+    return target
+
+
+def open_monitor(
+    config: dict[str, str],
+    opener: Any | None = None,
+    timeout: float = DEFAULT_TIMEOUT,
+    browser_open: Any | None = None,
+) -> str:
+    target = monitor_browser_url(config)
+    open_verified_url(config, target, opener=opener, timeout=timeout, browser_open=browser_open)
+    return target
+
+
 def submit_call(config: dict[str, str], number: str, opener: Any | None = None, timeout: float = DEFAULT_TIMEOUT, request_id: str | None = None) -> dict[str, Any]:
     opener = opener or urllib.request.build_opener(NoRedirect())
     token = verify_bootstrap(config, opener, timeout)
@@ -213,6 +275,37 @@ def show_result(message: str) -> None:
         ctypes.windll.user32.MessageBoxW(None, message, "Kienzlefon T2med", 0x00000040)
 
 
+def show_desktop_error(message: str) -> None:
+    """Show a best-effort native error without making a GUI toolkit mandatory."""
+    if sys.platform == "win32":
+        import ctypes
+
+        ctypes.windll.user32.MessageBoxW(None, message, "Kienzlefon T2med", 0x00000010 | 0x00010000)
+        return
+    if sys.platform == "darwin":
+        script = 'on run argv\ndisplay alert "Kienzlefon T2med" message (item 1 of argv) as critical\nend run'
+        try:
+            subprocess.run(["/usr/bin/osascript", "-e", script, message], check=False)
+        except OSError:
+            pass
+        return
+    commands = (
+        ["zenity", "--error", "--title=Kienzlefon T2med", "--text", message],
+        ["kdialog", "--title", "Kienzlefon T2med", "--error", message],
+        ["xmessage", "-center", "-title", "Kienzlefon T2med", message],
+        ["notify-send", "--urgency=critical", "Kienzlefon T2med", message],
+    )
+    for command in commands:
+        try:
+            result = subprocess.run(command, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if result.returncode == 0:
+                return
+        except FileNotFoundError:
+            continue
+        except OSError:
+            return
+
+
 def default_config_path() -> Path:
     if sys.platform == "win32":
         base = os.environ.get("APPDATA")
@@ -232,6 +325,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT)
     parser.add_argument("--dry-run", action="store_true", help="validiert lokal und sendet keinen HTTP-Auftrag")
     parser.add_argument("--confirmed", action="store_true", help=argparse.SUPPRESS)
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--open-browser", action="store_true", help="öffnet nach GET-Prüfung die Wählbestätigung im Browser")
+    mode.add_argument("--open-monitor", action="store_true", help="öffnet nach GET-Prüfung die Kompaktübersicht im Browser")
+    mode.add_argument("--check-registration", action="store_true", help="prüft die Client-Zuordnung nur per GET")
+    parser.add_argument("--desktop-errors", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--write-config", action="store_true")
     parser.add_argument("--url")
     parser.add_argument("--client-id")
@@ -242,6 +340,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
     try:
+        if not math.isfinite(args.timeout) or args.timeout <= 0:
+            raise ClientError("--timeout muss eine positive endliche Zahl sein.")
         config_path = args.config or default_config_path()
         if args.write_config:
             if not all(isinstance(value, str) for value in (args.url, args.client_id, args.extension)):
@@ -251,9 +351,33 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         config = load_config(config_path)
         source = args.number if args.number is not None else args.uri
+        if args.open_monitor or args.check_registration:
+            if source is not None:
+                raise ClientError("Dieser Modus akzeptiert keine Rufnummer oder URI.")
+            if args.dry_run:
+                target = monitor_browser_url(config) if args.open_monitor else None
+                print("Dry-run: keine Netzwerk-, Browser- oder Anrufaktion; Serverzuordnung wurde nicht online geprüft.")
+                if target is not None:
+                    print(target)
+                return 0
+            if args.check_registration:
+                opener = urllib.request.build_opener(NoRedirect())
+                verify_bootstrap(config, opener, args.timeout)
+                print(f"Registrierung gültig: {config['client_id']} ist Nebenstelle {config['extension']} zugeordnet.")
+                return 0
+            open_monitor(config, timeout=args.timeout)
+            return 0
         if source is None:
             raise ClientError("Eine tel:/callto:-URI oder --number ist erforderlich.")
         number = normalize_number(source)
+        if args.open_browser:
+            target = call_browser_url(config, number)
+            if args.dry_run:
+                print("Dry-run: keine Netzwerk-, Browser- oder Anrufaktion; Serverzuordnung wurde nicht online geprüft.")
+                print(target)
+                return 0
+            open_call_in_browser(config, number, timeout=args.timeout)
+            return 0
         payload = {
             "client_id": config["client_id"],
             "extension": config["extension"],
@@ -277,7 +401,10 @@ def main(argv: list[str] | None = None) -> int:
             show_result(f"Rückruf angefordert: Zuerst klingelt Ihre Nebenstelle {config['extension']}. Nach dem Abheben wird {number} gewählt.")
         return 0
     except ClientError as exc:
-        print(f"Kienzlefon-Fehler: {exc}", file=sys.stderr)
+        message = f"Kienzlefon-Fehler: {exc}"
+        print(message, file=sys.stderr)
+        if args.desktop_errors:
+            show_desktop_error(message)
         return 1
 
 

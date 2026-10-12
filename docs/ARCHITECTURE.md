@@ -16,9 +16,12 @@ Kein Benutzerlogin. Netzwerkbereich und erlaubte Hostnamen sind konfiguriert. Br
 - `POST /api/v1/patient-open` mit `{client_id,lookup_id,patient_number,request_id}`: ausgewählten Kandidaten als GDT schreiben. Nur zum Lookup gehörende, eindeutig identifizierbare Patientennummern akzeptieren. Noch nicht konsumierte Datei nicht überschreiben. `request_id` ist eine UUID und dient der Wiederholungserkennung.
 - `POST /api/v1/calls` mit `{client_id,extension,number,request_id}`: Nebenstelle muss zur serverseitigen Client-Zuordnung passen. Erst Nebenstelle, dann Ziel anrufen. HTTP 202 bedeutet angenommen, nicht verbunden.
 - `GET /patient-oeffnen?client_id=empfang-1&telefon=…`: Einstiegsseite für den Weblink. Der bloße GET schreibt keine Datei. Die Oberfläche verarbeitet eine aktive Navigation, löst den Lookup aus und bei eindeutigem Treffer den POST; mehrere Kandidaten erfordern Auswahl.
-- `GET /waehlen?client_id=empfang-1&telefon=…`: Einstieg für native URI-Handler, falls kein direkter API-Aufruf erfolgt.
+- `GET /waehlen?client_id=empfang-1&telefon=…`: Einstiegsseite mit Wählbestätigung.
+- `GET /waehlen?client_id=empfang-1&telefon=…&sofort=1`: explizite Direktwahl. Nach frischer Navigation in sichtbarer, nicht vorgerenderter Seite genau einen Anruf-POST auslösen; kein Bestätigungsdialog. Aktionsparameter vor der ersten Netzwerkanfrage aus der Browserhistorie entfernen, damit Reload/Zurück keinen neuen Auftrag erzeugt. Bloßer GET bleibt lesend. Jede erneute bewusst geöffnete vollständige Direktwahl-URL ist ein neuer Wahlauftrag.
+- `expected_extension` prüft bei Client-Wähl-URLs zusätzlich die lokal registrierte Nebenstelle gegen Bootstrap; bei Abweichung kein automatischer Wahlauftrag.
+- `/?view=compact&client_id=empfang-1` und `/?view=full&client_id=empfang-1` wählen die Ansicht. Ohne expliziten Parameter gilt die gespeicherte Ansicht, sonst Kompakt.
 
-Status der Auflösung: `pending`, `resolved`, `ambiguous`, `not_found`, `timeout`, `error`. Allgemeine APS-Suche kann Patientennummern finden; verdächtige Zahlentreffer verlangen Auswahl und werden nicht automatisch als Telefonname verwendet. Verschiedene Patienten mit identischen Namen bleiben getrennt. Geburtsdatum aus APS unverändert anzeigen, solange dessen Format nicht gesichert ist.
+Status der Auflösung: `pending`, `resolved`, `ambiguous`, `not_found`, `timeout`, `error`. Allgemeine APS-Suche kann Patientennummern finden; verdächtige Zahlentreffer verlangen Auswahl und werden nicht automatisch als Telefonname verwendet. Verschiedene Patienten mit identischen Namen bleiben getrennt. Das API liefert Geburtsdaten unverändert. Die Oberfläche formatiert kalendergültige, eindeutig erkennbare Werte in YYYYMMDD, DDMMYYYY oder YYYY-MM-DD als DD.MM.YYYY; unklare Werte bleiben unverändert.
 
 ## AMI und APS
 

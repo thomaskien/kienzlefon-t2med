@@ -25,3 +25,14 @@ jobs:
       - run: python3 -m unittest discover -s tests/integration -v
       - run: bash -n installer/install.sh clients/install-linux.sh clients/install-macos.sh
       - run: bash installer/install.sh --dry-run
+
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save --package-lock=false --ignore-scripts playwright@1.62.1
+      - run: npx playwright install --with-deps chromium
+      - run: node tests/ui/compact.cjs

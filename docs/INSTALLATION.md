@@ -58,35 +58,21 @@ APS, AMI und Middleware dürfen auf demselben oder auf getrennten Hosts laufen. 
 
 ## Lokale Click-to-Dial-Registrierung
 
-Jeder Arbeitsplatz bekommt ausschließlich Middleware-URL, Client-ID und die dazu gehörige Nebenstelle. APS-/AMI-Zugangsdaten werden nie lokal gespeichert. Der gemeinsame Python-3-Helper validiert `tel:`/`callto:` streng, prüft Client-ID und Nebenstelle gegen `GET /api/v1/bootstrap` und sendet genau einen Auftrag an `POST /api/v1/calls`. Er wiederholt ein ungewisses Originate nicht automatisch. HTTP 202 wird als „Auftrag angenommen“, nicht als zustande gekommenes Gespräch, angezeigt.
+Die Weboberfläche bietet im Menü **Telefonie-App einrichten** passende Befehle
+für den ausgewählten Arbeitsplatz und Windows, macOS oder Linux. Die Installer
+registrieren `tel:` und `callto:` sowie einen Launcher für die Kompaktübersicht.
+Voraussetzung ist Python 3.9 oder neuer. Installation im Benutzerprofil, ohne
+Administratorrechte beziehungsweise `sudo`.
 
-Linux, als angemeldeter Desktopbenutzer ohne `sudo`:
+Der lokale Helper speichert nur Middleware-URL, Client-ID und zugeordnete
+Nebenstelle. Vor dem Öffnen prüft er diese Zuordnung per GET am Server. Der
+Desktopaufruf öffnet die Wählbestätigung im Browser; den Anruf startet der dortige
+Button. APS-/AMI-Zugangsdaten bleiben auf dem Server. Die Windows-/macOS-Auswahl
+der Standard-App erfolgt über das Betriebssystem.
 
-```sh
-clients/install-linux.sh --url http://middleware.example:8765 --client-id empfang-1 --extension 201
-```
-
-macOS, ebenfalls ohne `sudo` (Python 3 muss separat vorhanden sein):
-
-```sh
-clients/install-macos.sh --url http://middleware.example:8765 --client-id empfang-1 --extension 201
-```
-
-Windows PowerShell, ohne Administratorrechte:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\clients\install-windows.ps1 -Url http://middleware.example:8765 -ClientId empfang-1 -Extension 201
-```
-
-Der Windows-Installer prüft ausdrücklich auf Python 3.9+. Linux legt eine Desktopdatei im Benutzerprofil an, macOS eine `.app` mit `CFBundleURLTypes`, Windows registriert eine eigene Anwendung unter `HKCU` für `tel` und `callto`; die Zuordnung erfolgt in den Windows-Standard-Apps. Vor jedem echten POST muss der Benutzer den Wahlvorgang bestätigen; ohne interaktives Terminal beziehungsweise den macOS-Dialog bricht der Helper ab. So löst das bloße Öffnen eines fremden Weblinks keinen automatischen Anruf aus. Das Betriebssystem kann zusätzlich eine Bestätigung oder Auswahl der Standard-App verlangen; diese Schutzabfrage wird nicht umgangen. Falls ein anderer Handler Standard bleibt, in den jeweiligen Standard-App-Einstellungen „Kienzlefon T2med“ für TEL/CALLTO wählen.
-
-Die Shell-Installer besitzen `--dry-run`, der Windows-Installer `-DryRun`. Der Helper selbst kann ohne HTTP-POST und ohne Telefonat getestet werden:
-
-```sh
-python3 clients/kienzlefon_call.py --config ~/.config/kienzlefon-t2med/client.json --dry-run 'tel:%2B49%2030%2012345'
-```
-
-Der Helper weist dabei darauf hin, dass die Serverzuordnung offline nicht geprüft wurde. Ein normaler Aufruf verwendet kurze Timeouts, lehnt Redirects und HTTP-Fehler ab und führt URI-Inhalte nie als Shellcode aus.
+Ausführliche Anleitungen, Update und lesende Registrierungsprüfung:
+[Desktop-Clients](CLIENTS.md). Kompaktansicht, Direktwahl ohne Rückfrage und
+Aktenlinks: [Oberfläche und Weblinks](WEB.md).
 
 ## Betrieb und Diagnose
 
@@ -106,7 +92,7 @@ systemctl status smbd.service
 testparm -s /etc/samba/smb.conf
 ```
 
-Der Dienst braucht keine PID-Datei. Nach Konfigurationsänderungen kann er mit `systemctl restart kienzlefon-t2med.service` neu gestartet werden. Die Web/API-Anwendung hat keine Benutzeranmeldung; Zugriffsschutz erfolgt deshalb durch LAN-Firewall, `allowed_hosts`, `allowed_networks`, Same-Origin-Prüfung und das flüchtige Bootstrap-Token. Ein fremder Weblink darf ohne echte Benutzeraktion keinen lokalen Wahlvorgang auslösen.
+Der Dienst braucht keine PID-Datei. Nach Konfigurationsänderungen kann er mit `systemctl restart kienzlefon-t2med.service` neu gestartet werden. Die Web/API-Anwendung hat keine Benutzeranmeldung; Zugriffsschutz erfolgt deshalb durch LAN-Firewall, `allowed_hosts`, `allowed_networks`, Same-Origin-Prüfung und das flüchtige Bootstrap-Token. Die explizite Direktwahl-URL mit `sofort=1` startet nach aktiver Navigation im sichtbaren Browser einen Anruf ohne zusätzlichen Dialog; normale Wähl-URLs und Desktop-Handler verwenden die Bestätigung. Bloße HTTP-GETs führen keinen Anruf aus.
 
 ## Entwicklertests
 

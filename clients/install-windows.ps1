@@ -18,6 +18,12 @@ if (-not $pythonCommand) {
 }
 & $pythonCommand.Source @pythonArgs -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)'
 if ($LASTEXITCODE -ne 0) { throw 'Python 3.9 oder neuer ist erforderlich.' }
+$pythonExe = (& $pythonCommand.Source @pythonArgs -c 'import os, sys; print(os.path.realpath(sys.executable))' | Select-Object -Last 1)
+if ($LASTEXITCODE -ne 0 -or -not $pythonExe) { throw 'Der Pfad der Python-Installation konnte nicht ermittelt werden.' }
+$pythonw = Join-Path (Split-Path -Parent $pythonExe.Trim()) 'pythonw.exe'
+if (-not (Test-Path -LiteralPath $pythonw -PathType Leaf)) {
+    throw 'pythonw.exe wurde neben der verwendeten Python-Installation nicht gefunden. Bitte eine vollständige Python-3.9+-Installation verwenden.'
+}
 
 if (-not $Url) { $Url = Read-Host 'Middleware-URL' }
 if (-not $ClientId) { $ClientId = Read-Host 'Client-ID' }
@@ -27,6 +33,11 @@ $sourceHelper = Join-Path $PSScriptRoot 'kienzlefon_call.py'
 $installDir = Join-Path $env:LOCALAPPDATA 'KienzlefonT2med'
 $helper = Join-Path $installDir 'kienzlefon_call.py'
 $config = Join-Path $env:APPDATA 'KienzlefonT2med\client.json'
+$startMenuDir = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs'
+$shortcutPath = Join-Path $startMenuDir 'Kienzlefon T2med.lnk'
+$progId = 'KienzlefonT2med.Url'
+$base = "HKCU:\Software\Classes\$progId"
+$capabilities = 'HKCU:\Software\KienzlefonT2med\Capabilities'
 $validation = Join-Path ([System.IO.Path]::GetTempPath()) ("kienzlefon-{0}.json" -f [guid]::NewGuid())
 try {
     & $pythonCommand.Source @pythonArgs $sourceHelper --write-config --config $validation --url $Url --client-id $ClientId --extension $Extension
@@ -35,27 +46,41 @@ try {
     Remove-Item -LiteralPath $validation -Force -ErrorAction SilentlyContinue
 }
 if ($DryRun) {
-    Write-Host "Dry-run: würde Helper nach $helper und Konfiguration nach $config installieren sowie HKCU tel/callto registrieren."
+    Write-Host "Dry-run: würde Helper nach $helper, Konfiguration nach $config und Launcher nach $shortcutPath installieren sowie die App für TEL/CALLTO in HKCU anbieten."
     Write-Host 'Keine Registrierung und kein Telefonat wurden ausgeführt.'
     exit 0
 }
 
+if (Test-Path -LiteralPath $helper) {
+    $existingHelper = Get-Content -LiteralPath $helper -Raw
+    if (-not $existingHelper.Contains('Safe per-user tel:/callto: handler for Kienzlefon T2med')) {
+        throw "Fremde Datei bleibt erhalten: $helper"
+    }
+}
+$shell = New-Object -ComObject WScript.Shell
+if (Test-Path $base) {
+    $existingName = (Get-Item -Path $base).GetValue('')
+    if ($existingName -and $existingName -ne 'Kienzlefon T2med') {
+        throw "Fremde Protokollregistrierung bleibt erhalten: $base"
+    }
+}
+if (Test-Path -LiteralPath $shortcutPath) {
+    $existingShortcut = $shell.CreateShortcut($shortcutPath)
+    if (-not ([string]$existingShortcut.Arguments).Contains('kienzlefon_call.py')) {
+        throw "Fremde Verknüpfung bleibt erhalten: $shortcutPath"
+    }
+}
 New-Item -ItemType Directory -Path $installDir -Force | Out-Null
 Copy-Item -LiteralPath $sourceHelper -Destination $helper -Force
 & $pythonCommand.Source @pythonArgs $helper --write-config --config $config --url $Url --client-id $ClientId --extension $Extension
 if ($LASTEXITCODE -ne 0) { throw 'Konfiguration konnte nicht gespeichert werden.' }
 
-$prefix = '"' + $pythonCommand.Source + '"'
-if ($pythonArgs.Count -gt 0) { $prefix += ' -3' }
-$commandValue = $prefix + ' "' + $helper + '" "%1"'
-$progId = 'KienzlefonT2med.Url'
-$base = "HKCU:\Software\Classes\$progId"
+$commandValue = '"' + $pythonw + '" "' + $helper + '" --open-browser --desktop-errors --config "' + $config + '" -- "%1"'
 New-Item -Path $base -Force | Out-Null
 Set-Item -Path $base -Value 'Kienzlefon T2med'
 New-ItemProperty -Path $base -Name 'URL Protocol' -Value '' -PropertyType String -Force | Out-Null
 New-Item -Path "$base\shell\open\command" -Force | Out-Null
 Set-Item -Path "$base\shell\open\command" -Value $commandValue
-$capabilities = 'HKCU:\Software\KienzlefonT2med\Capabilities'
 New-Item -Path "$capabilities\URLAssociations" -Force | Out-Null
 New-ItemProperty -Path $capabilities -Name ApplicationName -Value 'Kienzlefon T2med' -PropertyType String -Force | Out-Null
 New-ItemProperty -Path $capabilities -Name ApplicationDescription -Value 'Telefonate über die zugewiesene Praxis-Nebenstelle' -PropertyType String -Force | Out-Null
@@ -64,4 +89,11 @@ foreach ($scheme in @('tel', 'callto')) {
 }
 New-Item -Path 'HKCU:\Software\RegisteredApplications' -Force | Out-Null
 New-ItemProperty -Path 'HKCU:\Software\RegisteredApplications' -Name 'Kienzlefon T2med' -Value 'Software\KienzlefonT2med\Capabilities' -PropertyType String -Force | Out-Null
+New-Item -ItemType Directory -Path $startMenuDir -Force | Out-Null
+$shortcut = $shell.CreateShortcut($shortcutPath)
+$shortcut.TargetPath = $pythonw
+$shortcut.Arguments = '"' + $helper + '" --open-monitor --desktop-errors --config "' + $config + '"'
+$shortcut.WorkingDirectory = $installDir
+$shortcut.Description = 'Kienzlefon T2med Kompaktübersicht'
+$shortcut.Save()
 Write-Host 'Installiert. In den Windows-Standard-Apps Kienzlefon T2med für TEL und CALLTO auswählen.'

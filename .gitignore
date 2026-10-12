@@ -24,3 +24,6 @@ WORKER_TASK.md
 /docs/INSTALLER_APS_AMI_ZUGANG.md
 /docs/anrufmonitor-demo.jpg
 
+
+# Optional browser-test dependency, never needed by the PHP service.
+node_modules/

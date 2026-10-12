@@ -4,6 +4,7 @@ Zentrale PHP-Middleware zwischen Asterisk und T2med: Anrufer erkennen, Warteschl
 
 ## Funktionen
 
+- Kompaktansicht für den Arbeitsplatz (ca. 250 × 160 px bei einem eigenen Gespräch und zwei Wartenden), aufklappbare Patientenauswahl und vollständige Übersicht.
 - Dauerhafte AMI-Verbindung mit Wiederverbindung und Bestandsabgleich; Warteschlangen, Gespräche und Nebenstellen als Webansicht und JSON.
 - Asynchrone Patientensuche über den bestätigten APS-Suchendpunkt. Mehrere Patienten zu einer Rufnummer bleiben getrennt und werden zur Auswahl angeboten.
 - Namensauflösung für die Telefonanzeige über temporäre Kanalvariablen. Die Ein-Sekunden-Frist und die Übernahme in `CALLERID(name)` bleiben im Asterisk-Dialplan.
@@ -57,6 +58,17 @@ http://middleware.example:8765/patient-oeffnen?client_id=empfang-1&telefon=%2B49
 ```
 
 Bei eindeutiger Zuordnung erfolgt die GDT-Übergabe, bei mehreren Kandidaten eine Auswahl. Ein bloßer GET liefert nur die Seite. Der Browser löst den schreibenden POST aus. Die Arbeitsplatzwahl wird lokal im Browser gespeichert.
+
+Direktwahl ohne zusätzliche Bestätigung, zum Einbau in die kienzlefon-Oberfläche:
+
+```text
+http://middleware.example:8765/waehlen?client_id=empfang-1&telefon=%2B493055501111&sofort=1
+```
+
+Zuerst klingelt die zugeordnete Nebenstelle, nach dem Abheben das Ziel. Ohne
+`sofort=1` erscheint die Wählbestätigung. Reload und Zurücknavigation wiederholen
+keinen Auftrag. [Weblinks und Bedienung](docs/WEB.md) ·
+[Windows/macOS/Linux-Registrierung](docs/CLIENTS.md).
 
 ## Prüfstand
 

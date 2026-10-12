@@ -52,3 +52,35 @@ Anschließend gemeinsam mit dem angepassten kienzlefon-Dialplan testen:
 8. `tel:`/`callto:` unter den jeweiligen Betriebssystemen registrieren und prüfen. Windows-Registry, macOS-LaunchServices, Linux-systemd/APT/Samba und reale Telefonate wurden im lokalen Mac-Entwicklungslauf nicht verändert.
 
 GDT- und Click-to-Dial-Wiederholungskennungen sind im Arbeitsspeicher und überleben keinen Neustart. Bei ungewissem Wahlauftrag das Telefon prüfen, bevor ein neuer Auftrag angelegt wird. Die Webmeldung „Aufruf an T2med übergeben“ ist keine Rückmeldung über die tatsächlich sichtbare Akte.
+
+## Browserprüfung der Kompaktansicht
+
+```sh
+npm install --no-save --package-lock=false --ignore-scripts playwright@1.62.1
+npx playwright install chromium
+node tests/ui/compact.cjs
+```
+
+Die Tests bedienen Chromium mit vollständig gemockten HTTP-Endpunkten und
+fiktiven Patientendaten: 250 × 160 Pixel, eigene Verbindung, Reihenfolge der
+Wartenden, Details/Mehrdeutigkeit, Fokus bei Polling und Entfernen einer
+vorhergehenden Zeile, Offline/Recovery, unterdrückte Rufnummer, leerer/voller
+Monitor, Übersicht, Touch-Ziele, Geburtsdatum, Direktwahl und GDT ohne
+Wiederholung bei Reload/Zurück, Standard-Wählbestätigung sowie abweichende lokale
+Nebenstellenzuordnung. Verdeckte Ansichten pollen weiter; Direktaktionen warten
+auf Sichtbarkeit. Es werden keine echten Anrufe oder GDT-Dateien erzeugt.
+
+`UI_BROWSER_CHANNEL=chrome` verwendet ein vorhandenes Chrome mit isoliertem
+Testprofil. `UI_SCREENSHOT=/absoluter/pfad/kompakt.png` speichert zusätzlich eine
+Ansicht mit fiktiven Daten. Die tatsächliche Windows-Taskleistenanzeige, Browser-
+Drosselung im minimierten Zustand und Betriebssystem-Standardzuordnungen brauchen
+weiterhin die Prüfung auf dem jeweiligen Arbeitsplatz.
+
+Stand 12.10.2026 für Kompaktansicht und Desktop-Clients: 30 PHP-Kerntests,
+26 PHP-Installerprüfungen, 27 Clienttests, 8 Integrationstests und 11
+Browser-Szenarien erfolgreich. Die Python-Installer-Suite hat lokal 10 Tests
+bestanden; der zusätzliche Linux-spezifische Socket-Test wird auf macOS
+übersprungen und in CI unter Linux ausgeführt. Die macOS-Launcher- und
+Standardzuordnungs-Skripte wurden in einem temporären Verzeichnis erfolgreich
+kompiliert, ohne sie zu registrieren oder auszuführen. Windows PowerShell und
+echte Desktop-Standardzuordnungen wurden lokal nicht ausgeführt.
