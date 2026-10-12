@@ -65,7 +65,8 @@ node tests/ui/compact.cjs
 ```
 
 Die Tests bedienen Chromium mit vollständig gemockten HTTP-Endpunkten und
-fiktiven Patientendaten: 250 × 160 Pixel, eigene Verbindung, Reihenfolge der
+fiktiven Patientendaten: 250 × 190 Pixel, getrennte Bereiche für Gespräche und
+Warteschlange, eigene Verbindung, Reihenfolge der
 Wartenden, Details/Mehrdeutigkeit, Fokus bei Polling und Entfernen einer
 vorhergehenden Zeile, Offline/Recovery, unterdrückte Rufnummer, leerer/voller
 Monitor, Übersicht, Touch-Ziele, Geburtsdatum, Direktwahl und GDT ohne

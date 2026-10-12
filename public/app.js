@@ -168,8 +168,9 @@ function render(data, unreachable = false) {
   reconcile($('queues'),queueNodes); reconcile($('compact-waiting'),compactWaiting);
   const conversations = calls.filter(c => c.state !== 'waiting'), currentExtension = clients.find(c => c.id === $('client').value)?.extension;
   const own = conversations.filter(c => currentExtension && c.extensions.includes(currentExtension)), others = conversations.filter(c => !own.includes(c));
+  const allCallsShown = !$('compact-conversations').hidden;
   reconcile($('calls'),conversations.length ? conversations.map(c => callCard(c)) : [el('p','empty',stale ? 'Aktueller Gesprächsstatus nicht verfügbar.' : 'Zurzeit keine Gespräche.')]);
-  reconcile($('compact-own'),own.map(c => compactRow(c,null,`own-${c.id}`,true)));
+  reconcile($('compact-own'),own.length || allCallsShown ? own.map(c => compactRow(c,null,`own-${c.id}`,true)) : [el('p','compact-empty',stale ? 'Gesprächsstatus nicht verfügbar.' : 'Keine eigenen Gespräche.')]);
   const otherCalls = others.map(c => {
     const row = compactRow(c,null,`all-${c.id}`);
     row.querySelector('.row-mark').textContent = c.extensions[0] || '☎';
@@ -177,8 +178,8 @@ function render(data, unreachable = false) {
     return row;
   });
   reconcile($('compact-all-calls'),otherCalls.length ? otherCalls : [el('p','compact-empty',stale ? 'Gesprächsstatus nicht verfügbar.' : own.length ? 'Keine weiteren Gespräche.' : 'Zurzeit keine Gespräche.')]);
-  $('conversations-toggle').textContent = `Alle Gespräche (${stale ? '–' : conversations.length}) ${$('compact-conversations').hidden ? '▾' : '▴'}`;
-  $('conversations-toggle').setAttribute('aria-label',`Alle laufenden Gespräche (${stale ? 'Status unbekannt' : conversations.length})`);
+  $('conversations-toggle').textContent = allCallsShown ? 'Eigene Gespräche ▴' : `Alle Gespräche (${stale ? '–' : conversations.length}) ▾`;
+  $('conversations-toggle').setAttribute('aria-label',allCallsShown ? 'Eigene Gespräche anzeigen' : `Alle Gespräche anzeigen (${stale ? 'Status unbekannt' : conversations.length})`);
   $('more-toggle').textContent = `Nst. (${data.extensions.length})`;
   const extNodes = [], compactExtensions = [];
   for (const ext of data.extensions) {

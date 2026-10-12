@@ -7,7 +7,7 @@ Webmenü, unter `/healthz` und in `php bin/server.php --version`.
 
 ## Funktionen
 
-- Kompaktansicht für den Arbeitsplatz (ca. 250 × 160 px bei einem eigenen Gespräch und zwei Wartenden), aufklappbare Patientenauswahl und vollständige Übersicht.
+- Kompaktansicht für den Arbeitsplatz (ca. 250 × 190 px bei einem eigenen Gespräch und zwei Wartenden), getrennte Bereiche für Gespräche und Warteschlange, aufklappbare Patientenauswahl und vollständige Übersicht.
 - Dauerhafte AMI-Verbindung mit Wiederverbindung und Bestandsabgleich; Warteschlangen, Gespräche und Nebenstellen als Webansicht und JSON.
 - Asynchrone Patientensuche über den bestätigten APS-Suchendpunkt. Mehrere Patienten zu einer Rufnummer bleiben getrennt und werden zur Auswahl angeboten.
 - Namensauflösung für die Telefonanzeige über temporäre Kanalvariablen. Die Ein-Sekunden-Frist und die Übernahme in `CALLERID(name)` bleiben im Asterisk-Dialplan.

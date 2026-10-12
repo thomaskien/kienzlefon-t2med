@@ -6,9 +6,15 @@
 <section id="compact-shell" class="compact-only" aria-label="Kompakte Telefonieübersicht">
   <header class="compact-head"><strong id="compact-extension" title="Eigene Nebenstelle">–</strong><span id="compact-counts">Verbinde …</span><span id="compact-demo" class="demo-tag" hidden>DEMO</span><span id="compact-connection" class="status-dot" role="status" aria-label="Verbinde …" title="Verbinde …"></span><button class="icon-button" id="menu-toggle" data-action="tools" aria-label="Suche, Wählen und Arbeitsplatz" aria-expanded="false" aria-controls="tools">☰</button></header>
   <div id="compact-offline" class="compact-warning" hidden>Keine aktuellen Telefoniedaten</div>
-  <div id="compact-own" aria-label="Eigene Gespräche"></div>
-  <section id="compact-conversations" aria-label="Weitere laufende Gespräche" hidden><h2 class="compact-queue-title">Weitere Nebenstellen</h2><div id="compact-all-calls"></div></section>
-  <div id="compact-waiting" aria-label="Wartende Anrufe"><p class="compact-empty">Anrufe werden geladen …</p></div>
+  <section id="compact-talks" aria-labelledby="compact-talks-title">
+    <h2 id="compact-talks-title" class="compact-section-title">Gespräche</h2>
+    <div id="compact-own" aria-label="Eigene Gespräche"></div>
+    <div id="compact-conversations" aria-label="Weitere laufende Gespräche" hidden><div id="compact-all-calls"></div></div>
+  </section>
+  <section id="compact-queue" aria-labelledby="compact-queue-title">
+    <h2 id="compact-queue-title" class="compact-section-title">Warteschlange</h2>
+    <div id="compact-waiting" aria-label="Wartende Anrufe"><p class="compact-empty">Anrufe werden geladen …</p></div>
+  </section>
   <footer class="compact-foot"><button id="conversations-toggle" data-action="conversations" aria-expanded="false" aria-controls="compact-conversations">Alle Gespräche ▾</button><button id="more-toggle" data-action="more" aria-expanded="false" aria-controls="compact-more">Nebenstellen</button><button data-action="full">Übersicht ↗</button></footer>
   <div id="compact-more" hidden><div id="compact-extensions"></div></div>
 </section>

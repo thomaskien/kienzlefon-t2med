@@ -7,7 +7,8 @@ Ein direkter Einstieg ist `/?view=compact&client_id=empfang-1`. Für die vollst�
 Übersicht `/?view=full&client_id=empfang-1` verwenden oder unten „Übersicht“ wählen.
 
 Die Kopfzeile zeigt eigene Nebenstelle, Wartende, verbundene Gespräche und
-Verbindungsstatus. DEMO bleibt erkennbar. Eigene Verbindungen stehen vor der
+Verbindungsstatus. DEMO bleibt erkennbar. Die Bereiche **Gespräche** und
+**Warteschlange** haben getrennte Überschriften. Eigene Verbindungen stehen vor der
 Warteliste. Wartende erscheinen pro Queue in der gemeldeten Position; bei mehreren
 belegten Queues kennzeichnet eine Überschrift deren getrennte Reihenfolge. Die
 Warteliste scrollt unabhängig, während eigene Verbindung und Fußzeile erreichbar
@@ -15,7 +16,8 @@ bleiben. **Alle Gespräche** in der Fußzeile klappt die Verbindungen aller
 Nebenstellen einschließlich der eigenen auf. Die Liste zeigt Nebenstelle, Name
 bzw. Rufnummer und Dauer; Details und Aktenaufruf bleiben verfügbar. Diese Wahl
 bleibt während der Tab-Sitzung gespeichert, auch bei Polling, Ansichtswechsel und
-Neuladen. Ein erneuter Klick klappt sie ein. Nebenstellen haben einen getrennten
+Neuladen. Der Schalter heißt dann **Eigene Gespräche** und schaltet zurück auf die
+Verbindungen des eigenen Arbeitsplatzes. Nebenstellen haben einen getrennten
 Schalter. Bei Verbindungsverlust werden auch hier keine alten Gespräche angezeigt.
 
 Die installierte Version steht im Menü unter den Einstellungen.
@@ -27,7 +29,7 @@ eines konkreten Patienten erzeugt die GDT-Datei. Unterdrückte/unbekannte Rufnum
 bleiben ohne erzwungene Zuordnung sichtbar.
 
 Bei Mausbedienung passen ein eigenes Gespräch und zwei Wartende in ungefähr
-250 × 160 Pixel Inhaltsfläche. Touchgeräte erhalten größere Bedienelemente;
+250 × 190 Pixel Inhaltsfläche einschließlich der Bereichsüberschriften. Touchgeräte erhalten größere Bedienelemente;
 Browserleisten kommen zu den Maßen hinzu. Menü, Details und lange Listen brauchen
 zusätzlichen Platz. Über das Menü kann ein eigenes Kompaktfenster geöffnet werden;
 dessen endgültige Größe und Position verwaltet der Browser. Es wird beim Polling

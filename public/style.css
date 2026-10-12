@@ -46,7 +46,8 @@ body:not(.compact-view) .compact-only,.compact-view .full-only{display:none!impo
 .compact-extension{display:flex;justify-content:space-between;padding:7px 9px;font-size:11px;border-bottom:1px solid var(--line)}
 .compact-extension span{color:var(--muted)}
 #compact-more,#compact-conversations{border-bottom:1px solid var(--line);max-height:45vh;overflow-y:auto}
-#compact-conversations h2{margin:0;letter-spacing:normal}
+.compact-view .compact-section-title{margin:0;padding:2px 8px;font-size:10px;line-height:14px;letter-spacing:normal;font-weight:600;color:#637369;background:#e8eee6}
+#compact-queue{border-top:1px solid #cfd9d1}
 .compact-view #tools{padding:10px;background:#eef2e9;border-top:1px solid var(--line)}
 .compact-view .tools-head{margin-bottom:9px;align-items:flex-end}
 .compact-view .workplace{font-size:10px;gap:4px}

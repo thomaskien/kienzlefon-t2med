@@ -10,7 +10,7 @@ const fixture = () => ({generated_at:new Date().toISOString(),ami_connected:true
 (async () => {
   const browser = await chromium.launch({headless:true, ...(process.env.UI_BROWSER_CHANNEL ? {channel:process.env.UI_BROWSER_CHANNEL} : {})}); let passed = 0;
   async function run(name,fn) {
-    const context = await browser.newContext({viewport:{width:250,height:160},hasTouch:name.startsWith('Touch')}), page = await context.newPage();
+    const context = await browser.newContext({viewport:{width:250,height:190},hasTouch:name.startsWith('Touch')}), page = await context.newPage();
     const state = {data:fixture(),posts:[],offline:false,lookup:null,errors:[]};
     page.on('pageerror',e => state.errors.push(String(e)));
     await page.route('http://kienzlefon.test/**',async route => {
@@ -31,12 +31,16 @@ const fixture = () => ({generated_at:new Date().toISOString(),ami_connected:true
     try { await fn({page,state,go,context}); assert.deepEqual(state.errors,[]); passed++; console.log('OK '+name); } finally { await context.close(); }
   }
   try {
-    await run('250 × 160: own call, ordered queue, demo and footer fit',async ({page,go}) => {
+    await run('250 × 190: separate conversations and queue, own call, demo and footer fit',async ({page,go}) => {
       await go(); assert.equal(await page.locator('#compact-own .compact-name').innerText(),'Mara Berger');
+      assert.equal(await page.getByRole('region',{name:'Gespräche',exact:true}).getByRole('heading',{name:'Gespräche',exact:true}).isVisible(),true);
+      assert.equal(await page.getByRole('region',{name:'Warteschlange',exact:true}).getByRole('heading',{name:'Warteschlange',exact:true}).isVisible(),true);
+      assert.equal(await page.locator('#compact-talks .compact-call').count(),1);
+      assert.equal(await page.locator('#compact-queue .compact-call').count(),2);
       assert.deepEqual(await page.locator('#compact-waiting .row-mark').allTextContents(),['1','2']);
       assert.match(await page.title(),/^DEMO · 2 warten · 1 Gespräch/);
       assert.equal(await page.locator('#compact-demo').isVisible(),true);
-      const bounds = await page.locator('.compact-foot').boundingBox(); assert.ok(bounds.y+bounds.height <= 160,JSON.stringify(bounds));
+      const bounds = await page.locator('.compact-foot').boundingBox(); assert.ok(bounds.y+bounds.height <= 190,JSON.stringify(bounds));
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       if (process.env.UI_SCREENSHOT) await page.screenshot({path:process.env.UI_SCREENSHOT});
     });
@@ -55,7 +59,10 @@ const fixture = () => ({generated_at:new Date().toISOString(),ami_connected:true
       await go(); const toggle=page.locator('#conversations-toggle'), list=page.locator('#compact-all-calls');
       assert.match(await toggle.innerText(),/Alle Gespräche \(3\)/); assert.equal(await toggle.getAttribute('aria-expanded'),'false');
       await toggle.click(); assert.deepEqual(await list.locator('.row-mark').allTextContents(),['202','203']);
+      assert.equal(await toggle.innerText(),'Eigene Gespräche ▴'); assert.equal(await toggle.getAttribute('aria-label'),'Eigene Gespräche anzeigen');
       assert.equal(await page.locator('#compact-own .compact-call').count(),1); assert.equal(await list.locator('.compact-call').count(),2);
+      assert.equal(await page.locator('#compact-talks .compact-call').count(),3); assert.equal(await page.locator('#compact-queue .compact-call').count(),2);
+      if (process.env.UI_SCREENSHOT) await page.screenshot({path:process.env.UI_SCREENSHOT.replace('.png','-all-calls.png'),fullPage:true});
       await list.getByRole('button',{name:'Mia Klein',exact:true}).click(); await page.waitForFunction(() => !document.querySelector('#toast').hidden);
       assert.equal(state.posts.at(-1).body.patient_number,90005);
       await page.evaluate(() => poll()); assert.equal(await toggle.getAttribute('aria-expanded'),'true');
@@ -63,12 +70,17 @@ const fixture = () => ({generated_at:new Date().toISOString(),ami_connected:true
       assert.equal(await toggle.getAttribute('aria-expanded'),'true');
       await page.reload(); await page.waitForFunction(() => document.querySelector('#compact-counts').textContent.includes('2 warten'));
       assert.equal(await toggle.getAttribute('aria-expanded'),'true'); assert.equal(await list.locator('.compact-call').count(),2);
+      assert.equal(await toggle.innerText(),'Eigene Gespräche ▴');
+      await toggle.click(); assert.match(await toggle.innerText(),/Alle Gespräche \(3\)/);
+      assert.equal(await page.locator('#compact-conversations').isVisible(),false); assert.equal(await page.locator('#compact-own .compact-call').count(),1);
+      assert.equal(await page.locator('#compact-queue .compact-call').count(),2); await toggle.click();
       state.data.calls=state.data.calls.filter(c=>c.id!=='4'); await page.evaluate(() => poll());
       assert.equal(await list.locator('.compact-call').count(),1); assert.equal(await toggle.getAttribute('aria-expanded'),'true');
       state.offline=true; await page.evaluate(() => poll()); assert.equal(await list.locator('.compact-call').count(),0); assert.match(await list.innerText(),/nicht verfügbar/);
       state.offline=false; state.data.calls=[]; state.data.queues=[]; await page.evaluate(() => poll()); assert.match(await list.innerText(),/keine Gespräche/);
       await toggle.click(); await page.reload(); await page.waitForFunction(() => document.querySelector('#compact-counts').textContent.includes('0 warten'));
       assert.equal(await toggle.getAttribute('aria-expanded'),'false');
+      assert.match(await toggle.innerText(),/Alle Gespräche/); assert.match(await page.locator('#compact-own').innerText(),/Keine eigenen Gespräche/);
       await page.locator('#menu-toggle').click(); assert.match(await page.locator('#app-version').innerText(),/Version 1\.3/);
     });
     await run('Polling retains keyboard focus and expanded details',async ({page,state,go}) => {
