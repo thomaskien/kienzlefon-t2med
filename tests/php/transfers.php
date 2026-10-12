@@ -115,6 +115,13 @@ test('Abbruch kehrt erst bei bestätigter Ursprungsbrücke zurück',function () 
     eq(resultOf($f->transfers->control($f->input()['request_id'],'cancel',$f->controlInput()))['phase'],'cancelling');eq(count($f->sent('CancelAtxfer')),1);
     $f->emit(['Event'=>'BridgeLeave','Uniqueid'=>'staff']);$f->emit(['Event'=>'BridgeEnter','Uniqueid'=>'staff','BridgeUniqueid'=>'initial','ChannelStateDesc'=>'Up']);eq($f->job()['phase'],'cancelled');
 });
+test('Brückenwechsel vor dem Rückfrage-Dialplan gilt nicht als Abbruch',function () {
+    $f=new TransferFixture();resultOf($f->transfers->start($f->input()));
+    $f->emit(['Event'=>'BridgeLeave','Uniqueid'=>'staff']);
+    $f->emit(['Event'=>'BridgeEnter','Uniqueid'=>'staff','BridgeUniqueid'=>'initial','ChannelStateDesc'=>'Up']);
+    eq($f->job()['phase'],'requested');eq($f->job()['can_cancel'],false);
+    $f->consulting();eq($f->job()['phase'],'consulting');
+});
 test('Rückfrage verliert bei AMI-Ausfall sofort die Steuermöglichkeiten',function () {
     $f=new TransferFixture();resultOf($f->transfers->start($f->input()));$f->consulting();$f->state->disconnect();$f->transfers->disconnect();
     eq($f->job()['phase'],'unknown');eq($f->job()['can_complete'],false);eq($f->job()['can_cancel'],false);

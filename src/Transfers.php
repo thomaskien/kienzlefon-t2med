@@ -154,7 +154,7 @@ final class Transfers
             }
             if ($job['mode'] !== 'attended' || !$this->state->ready() || in_array($job['phase'], self::TERMINAL, true)) continue;
             $together = $this->state->bridged($source,$peer);
-            if (!$together && $this->state->channel($source) && $this->state->channel($peer)) $job['_left'] = true;
+            if ($job['_route'] && !$together && $this->state->channel($source) && $this->state->channel($peer)) $job['_left'] = true;
             if ($job['_left'] && $together) { $this->phase($id,'cancelled','Wieder mit dem ursprünglichen Anrufer verbunden.'); continue; }
             if ($this->consulting($job) && in_array($job['phase'], ['requested','ringing'], true)) $this->phase($id,'consulting','Rückfrage verbunden. Vermittlung abschließen oder zum Anrufer zurückkehren.');
             if ($type === 'Hangup' && in_array($e['Uniqueid'] ?? '', [$source,$peer,$job['_target']], true)) $this->watch($id);

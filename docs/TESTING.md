@@ -15,7 +15,7 @@ bash -n installer/install.sh clients/install-linux.sh clients/install-macos.sh
 bash installer/install.sh --dry-run
 ```
 
-Lokal geprüft für Version 1.3.1 am 12.10.2026: 44 PHP-Kerntests, 31 PHP-Installerprüfungen, 20 Python-Installerprüfungen, 27 Clienttests, 13 Integrationstests und 18 Browser-Szenarien. Ein zusätzlicher Linux-spezifischer Socket-Test wird auf macOS übersprungen. GitHub Actions wiederholt die Tests unter Linux mit PHP 8.2 und 8.4 sowie Chromium.
+Lokal geprüft für Version 1.3.1 am 12.10.2026: 45 PHP-Kerntests, 31 PHP-Installerprüfungen, 20 Python-Installerprüfungen, 27 Clienttests, 13 Integrationstests und 18 Browser-Szenarien. Ein zusätzlicher Linux-spezifischer Socket-Test wird auf macOS übersprungen. GitHub Actions wiederholt die Tests unter Linux mit PHP 8.2 und 8.4 sowie Chromium.
 
 Die Integrationstests starten simulierte AMI- und HTTPS-APS-Server ausschließlich auf Loopback sowie den echten PHP-Dienst mit temporärer Konfiguration. Es werden keine Praxisserver kontaktiert und keine echten Patientenakten geöffnet. Prüffälle:
 
