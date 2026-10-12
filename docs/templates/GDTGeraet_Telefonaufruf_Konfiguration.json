@@ -1,0 +1,57 @@
+{
+  "geraet" : {
+    "konfiguration" : {
+      "name" : "Telefonaufruf",
+      "serviceId" : 2,
+      "eintragFachinformationstyp" : 118,
+      "gdtKonfiguration" : {
+        "gdtId" : "AUFRUF",
+        "gdtAbsender" : "T2MED_PX",
+        "gdtKuerzel" : "MGRT",
+        "geraetVerfahren" : "",
+        "testIdent" : null,
+        "zeichensatz" : "2",
+        "betriebsmodus" : 1,
+        "anzeigeZeitpunkt" : 1,
+        "einzelverarbeitung" : false,
+        "abweichendeImportdatei" : "AUFRUFi.gdt",
+        "abweichendeExportdatei" : "AUFRUFo.gdt",
+        "langzeitmessung" : false,
+        "serienmessung" : true,
+        "annahmeOhneMessauftrag" : true,
+        "dezimalzeichen" : 1,
+        "satzart" : 2,
+        "automatischeZuordnung" : 1
+      },
+      "dokumenteUebernehmen" : false,
+      "kurzeintragGewuenscht" : false,
+      "koerpermassStrukturiertUebernehmen" : false,
+      "kostentraegerIKUebertragen" : false,
+      "sswUebertragen" : false,
+      "telefonUebertragen" : false,
+      "emailUebertragen" : false,
+      "zeitpunktUebernehmen" : false,
+      "messauftragGruppenweitSuchen" : false,
+      "inhaltsbeschreibungUebernehmen" : false,
+      "anzahlDerZeilen" : 5,
+      "messergebnisPraesentationTyp" : 1,
+      "freieKategorieAuswertung" : 1,
+      "nachtraeglicheBefundung" : 1,
+      "verwendeteMessergebnisFelder" : [ ],
+      "gruppe" : null
+    },
+    "stationZuordnung" : {
+      "importverzeichnis" : "/Volumes/kienzlefon-GDT/mac",
+      "exportverzeichnis" : "/Volumes/kienzlefon-GDT/mac",
+      "programm" : "/System/Applications/TextEdit.app",
+      "parameter" : null,
+      "wiederaufrufProgramm" : null,
+      "wiederaufrufParameter" : null,
+      "verwendungszweck" : 1,
+      "separatKonfiguriert" : false,
+      "einleseverzoegerung" : null,
+      "messgeraetVerbergen" : false,
+      "netzwerkpfad" : false
+    }
+  }
+}

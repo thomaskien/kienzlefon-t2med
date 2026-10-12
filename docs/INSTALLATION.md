@@ -88,6 +88,29 @@ Die neue Bedienung benötigt zusätzlich die [Einrichtung im kienzlefon-Telefonp
 
 ## Samba und GDT
 
+### GDT-Vorlage in T2med importieren
+
+**[GDT-Vorlage „Telefonaufruf“ herunterladen](https://raw.githubusercontent.com/thomaskien/kienzlefon-t2med/main/docs/templates/GDTGeraet_Telefonaufruf_Konfiguration.json)** · [JSON im Repository ansehen](templates/GDTGeraet_Telefonaufruf_Konfiguration.json)
+
+Die mitgelieferte Datei `GDTGeraet_Telefonaufruf_Konfiguration.json` ist die bereitgestellte T2med-Gerätekonfiguration. Sie enthält keine Patientendaten. Sie wird einmalig in T2med importiert; die laufenden Aktenaufrufe schreibt die Middleware als `AUFRUFi.gdt`.
+
+1. Die JSON-Datei herunterladen und mit der Endung `.json` speichern. Falls der Browser den Inhalt anzeigt, über **Speichern unter** als Datei sichern.
+2. In T2med **Hauptmenü → Geräte → Geräte verwalten** öffnen und die Gerätekonfiguration importieren. T2med unterstützt diesen Import seit Version 26.1. ([T2med-Versionshinweise](https://hilfe.t2med.de/blog/Version%2026.1/))
+3. Beim Gerät **Telefonaufruf** die Stationszuordnung für den jeweiligen Arbeitsplatz prüfen. Die Vorlage enthält die unten aufgeführten macOS-Beispielwerte; Verzeichnisse und Programmzuordnung passend setzen.
+4. Die Kalenderanbindung am Arbeitsplatz auf dessen Importdatei einstellen. Anschließend in der Weboberfläche den zugehörigen Arbeitsplatz wählen und einen Patienten öffnen. Prüfen, ob `AUFRUFi.gdt` in dessen Verzeichnis erzeugt und die Akte am richtigen T2med-Arbeitsplatz angezeigt wird.
+
+| Einstellung in der Vorlage | Wert | Anpassung |
+| --- | --- | --- |
+| Gerätename | `Telefonaufruf` | Bezeichnung des importierten Geräts. |
+| GDT-ID / `gdtId` | `AUFRUF` | Entspricht `gdt.sender` in der Middleware. |
+| T2med-Absender / `gdtAbsender` | `T2MED_PX` | Entspricht `gdt.receiver` in der Middleware. |
+| Abweichende Importdatei | `AUFRUFi.gdt` | Muss dem Middleware-Wert `gdt.filename` entsprechen; Groß-/Kleinschreibung beachten. |
+| Abweichende Exportdatei | `AUFRUFo.gdt` | In der Vorlage enthalten; Aktenaufrufe schreibt die Middleware in die Importdatei. |
+| Import- und Exportverzeichnis | `/Volumes/kienzlefon-GDT/mac` | Durch den am T2med-Arbeitsplatz erreichbaren Pfad zum eigenen GDT-Unterverzeichnis ersetzen. |
+| Programm | `/System/Applications/TextEdit.app` | macOS-Beispiel aus dem Export; für den jeweiligen Arbeitsplatz prüfen und passend konfigurieren. |
+
+Die Vorlage wird unverändert mitgeliefert. Insbesondere ist ihr Unterverzeichnis `mac` ein Beispiel und gilt nicht automatisch für alle Arbeitsplätze. Der lokale Linux-Pfad des Middleware-Servers, beispielsweise `/srv/kienzlefon-GDT/empfang-1`, ist nicht automatisch der Importpfad auf einem anderen Rechner; dort wird der eingebundene SMB-Pfad verwendet.
+
 ### Arbeitsplatz und Importdatei zuordnen
 
 Ein Client ist ein Arbeitsplatz, keine zusätzliche Benutzeranmeldung. Seine Client-ID verbindet die Browserauswahl beziehungsweise den lokalen Telefonie-Client mit einer Nebenstelle und einem GDT-Unterverzeichnis:

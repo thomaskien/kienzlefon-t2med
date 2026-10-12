@@ -1,6 +1,11 @@
+[![Demovideo: kienzlefon und T2med – zum Abspielen anklicken](https://i.ytimg.com/vi/kX2JQL1cnUw/maxresdefault.jpg)](https://youtu.be/kX2JQL1cnUw)
+
 **[▶ Demovideo auf YouTube ansehen](https://youtu.be/kX2JQL1cnUw)**
 
 # kienzlefon-t2med
+
+> [!WARNING]
+> **Nicht für diesen Zweck vorgesehene Schnittstelle:** Der Aktenaufruf nutzt die GDT-/Kalenderanbindung von T2med für die Telefonie-Anbindung. Diese Schnittstelle ist dafür nicht vorgesehen. T2med-Updates können das Verhalten ändern oder die Funktion unterbrechen. Den Aktenaufruf vor dem Praxiseinsatz und nach T2med-Updates am jeweiligen Arbeitsplatz prüfen.
 
 Anrufer erkennen, Warteschlangen und Gespräche im Blick behalten und die passende Patientenakte mit einem Klick öffnen: kienzlefon-t2med verbindet Asterisk mit T2med über eine zentrale PHP-Middleware.
 
@@ -70,7 +75,7 @@ Asterisk, APS und Middleware dürfen auf demselben oder auf getrennten Servern l
    sudo bash installer/install.sh
    ```
 
-4. **Arbeitsplätze zuordnen:** Der Installer fragt pro Arbeitsplatz Client-ID, Bezeichnung, Nebenstelle und GDT-Verzeichnis ab. Anschließend die T2med-Kalenderanbindung auf dessen `AUFRUFi.gdt` einstellen.
+4. **Arbeitsplätze zuordnen:** Der Installer fragt pro Arbeitsplatz Client-ID, Bezeichnung, Nebenstelle und GDT-Verzeichnis ab. Die [GDT-Vorlage „Telefonaufruf“](#gdt-vorlage-für-t2med) in T2med übernehmen und die Kalenderanbindung auf dessen `AUFRUFi.gdt` einstellen.
 5. **Webansicht öffnen:** Die im Installer festgelegte Middleware-Adresse aufrufen, Arbeitsplatz auswählen und die Patientensuche mit einer bekannten Rufnummer prüfen. Für `tel:`-/`callto:`-Links im Menü **Telefonie-App einrichten** den passenden Client installieren.
 
 Der Installer fragt auch APS- und AMI-Server samt Zugangsdaten sowie die öffentliche Middleware-URL ab. Die Serverkonfiguration liegt in `/etc/kienzlefon-t2med/config.toml`; der Dienst heißt `kienzlefon-t2med.service`.
@@ -84,6 +89,14 @@ kienzlefon-GDT/
 ```
 
 Client-ID, Nebenstelle und Verzeichnis gehören zusammen: `empfang-1` kann beispielsweise Nebenstelle `201` und das Verzeichnis `empfang-1` verwenden. Eine noch nicht importierte GDT-Datei wird durch den neuesten Aktenaufruf ersetzt. Die Webmeldung bestätigt die Dateiübergabe; die tatsächliche Aktenanzeige übernimmt T2med.
+
+### GDT-Vorlage für T2med
+
+**[GDT-Vorlage „Telefonaufruf“ herunterladen](https://raw.githubusercontent.com/thomaskien/kienzlefon-t2med/main/docs/templates/GDTGeraet_Telefonaufruf_Konfiguration.json)** · [Datei im Repository ansehen](docs/templates/GDTGeraet_Telefonaufruf_Konfiguration.json)
+
+Die JSON-Datei enthält die T2med-Gerätekonfiguration für den Aktenaufruf. Die mitgelieferten Stationspfade beziehen sich auf den macOS-Arbeitsplatz `mac`; Import-/Exportverzeichnis und Programmzuordnung nach dem Import an den jeweiligen Arbeitsplatz anpassen. Die einzelnen `AUFRUFi.gdt`-Dateien mit der Patientennummer erzeugt anschließend die Middleware.
+
+Die [Importanleitung mit den einzustellenden Werten](docs/INSTALLATION.md#gdt-vorlage-in-t2med-importieren) führt durch die Einrichtung.
 
 ### Aktualisieren
 
