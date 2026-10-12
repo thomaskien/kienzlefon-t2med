@@ -1,42 +1,81 @@
+**[▶ Demovideo auf YouTube ansehen](https://youtu.be/kX2JQL1cnUw)**
+
 # kienzlefon-t2med
 
-Zentrale PHP-Middleware zwischen Asterisk und T2med: Anrufer erkennen, Warteschlangen und Gespräche im Browser anzeigen, Patientenakten über GDT öffnen und Rückrufe vom richtigen Arbeitsplatz starten.
+Anrufer erkennen, Warteschlangen und Gespräche im Blick behalten und die passende Patientenakte mit einem Klick öffnen: kienzlefon-t2med verbindet Asterisk mit T2med über eine zentrale PHP-Middleware.
 
-Aktuelle Version: **1.3.6** · [Änderungen](CHANGELOG.md). Die Version steht auch im
-Footer (mit Autor Dr. Thomas Kienzle), im Webmenü, unter `/healthz`, in `php bin/server.php --version` und direkt beim Start des Installers (auch bei `--dry-run` und `--help`).
+**Version 1.3.6 · von Dr. Thomas Kienzle** · [Änderungen](CHANGELOG.md)
 
-## Funktionen
+[Installation](docs/INSTALLATION.md) · [Bedienung und Weblinks](docs/WEB.md) · [Telefonie-App für Windows, macOS und Linux](docs/CLIENTS.md) · [Asterisk-Einrichtung](docs/AMI_DIALPLAN.md)
 
-- Kompaktansicht für den Arbeitsplatz (ca. 250 × 210 px bei einem eigenen Gespräch und zwei Wartenden), getrennte Bereiche für Gespräche und Warteschlange, aufklappbare Patientenauswahl und vollständige Übersicht.
-- Dauerhafte AMI-Verbindung mit Wiederverbindung und Bestandsabgleich; Warteschlangen, Gespräche und Nebenstellen als Webansicht und JSON.
-- Asynchrone Patientensuche über den bestätigten APS-Suchendpunkt. Mehrere Patienten zu einer Rufnummer bleiben getrennt und werden zur Auswahl angeboten.
-- Namensauflösung für die Telefonanzeige über temporäre Kanalvariablen. Die Ein-Sekunden-Frist und die Übernahme in `CALLERID(name)` bleiben im Asterisk-Dialplan.
-- Patientenklick oder Weblink mit Rufnummer erzeugt eine ID-only-GDT im zugeordneten Arbeitsplatzverzeichnis.
-- Click-to-Dial: zuerst klingelt die eigene Nebenstelle, nach dem Abheben wird die Zielnummer gewählt. Registrierbare `tel:`-/`callto:`-Clients für Windows, macOS und Linux wählen direkt ohne Rückfrage oder Browserfenster.
-- Direkt oder mit Rückfrage intern/extern vermitteln; kleiner Pfeil am eigenen verbundenen Gespräch. Voraussetzung: [Ergänzung im Telefonprojekt](docs/TRANSFER_HANDOFF.md).
-- Linux-Installer mit systemd, geschützter Zugangskonfiguration und additiver Guestfreigabe `kienzlefon-GDT`.
+## So sieht es aus
 
-PHP 8.2+ mit ReactPHP, ohne Datenbank und ohne Webserver-/PHP-FPM-Pflicht. Unterstützte Server: Debian 12+, Ubuntu 24.04+, Raspberry Pi OS Bookworm+ mit systemd. AMI, APS und Middleware können auf unterschiedlichen Rechnern laufen. Die Weboberfläche benötigt keine Anmeldung und ist für das abgeschottete Praxisnetz konfiguriert.
+### Vollständige Telefonieübersicht
 
-## Installation
+Warteschlangen, laufende Gespräche und Nebenstellen stehen in einer gemeinsamen Ansicht. Die Rufnummernsuche und die Arbeitsplatzwahl sind direkt erreichbar. Ein Klick auf einen eindeutig zugeordneten Patientennamen übergibt dessen Akte an den gewählten T2med-Arbeitsplatz.
 
-Auf dem vorgesehenen Linux-Server:
+![Vollständige Telefonieübersicht mit zwei wartenden Anrufen, einem Gespräch und dem Status der Nebenstellen](docs/images/telefonieuebersicht.png)
 
-```sh
-git clone https://github.com/thomaskien/kienzlefon-t2med.git
-cd kienzlefon-t2med
-sudo bash installer/install.sh
-```
+*Die bereitgestellten Bildschirmaufnahmen zeigen einen früheren Oberflächenstand, in der Übersicht Version 1.3.3. Die aktuelle Version 1.3.6 ergänzt unter anderem die Rückrufverwaltung sowie Autor und Version im Footer.*
 
-Der Installer installiert fehlende PHP-/Composer-Pakete und fragt APS- und AMI-Server samt Zugangsdaten, Middleware-Adresse und Arbeitsplätze ab. Ein ausdrücklich leeres APS-Passwort ist gültig. Die bestehende APS-Zertifikatsausnahme kann für den Integrationstest eingestellt werden. Konfiguration: `/etc/kienzlefon-t2med/config.toml`; Dienst: `kienzlefon-t2med.service`.
+### Kompakt am Arbeitsplatz
 
-Bei erneuter Installation fragt der Installer im Terminal, ob Einstellungen
-geändert werden sollen. Vorhandene Werte werden dabei angeboten. Ohne Änderungen
-bleiben die Einstellungen erhalten; eine ältere `config.json` wird in TOML
-übernommen und bleibt als Altbestand erhalten. `--keep-config` überspringt die
-Nachfrage, `--reconfigure` öffnet direkt den Assistenten.
+Die schmale Ansicht zeigt eigene Gespräche und wartende Anrufer. **Alle Gespräche** blendet die Verbindungen der anderen Nebenstellen ein; **Eigene Gespräche** schaltet zurück. Die Auswahl bleibt während der Tab-Sitzung erhalten. Details und mehrere passende Patienten lassen sich aufklappen.
 
-Bei vorhandenem Samba werden dessen globale Authentifizierung und fremde Freigaben erhalten. Ist Guestzugriff damit nicht kompatibel, meldet der Installer den Konflikt. Mit `--skip-samba` lässt sich eine separat eingerichtete Freigabe verwenden. Details und Arbeitsplatzregistrierungen stehen in [Installation und Betrieb](docs/INSTALLATION.md).
+![Kompaktansicht mit getrennten Bereichen für Gespräche und Warteschlange sowie aufgeklappten Patientendetails](docs/images/kompaktansicht.jpg)
+
+*Der im älteren Screenshot sichtbare Rückrufknopf an einem laufenden Anruf entfällt seit 1.3.6. Rückrufaufträge werden im Menü verwaltet. Ohne aufgeklappte Details reichen bei einem eigenen Gespräch und zwei Wartenden ungefähr 250 × 210 Pixel Inhaltsfläche.*
+
+### Intern und extern vermitteln
+
+Der kleine Pfeil **↪** am eigenen verbundenen Gespräch öffnet die Zielauswahl. Möglich sind eine andere Nebenstelle oder eine externe Rufnummer, jeweils direkt oder mit Rückfrage.
+
+![Vermittlungsdialog mit Nebenstellenauswahl und den Aktionen Direkt vermitteln und Rückfrage starten](docs/images/vermittlung.jpg)
+
+Eine laufende Rückfrage wird in der vollständigen **Übersicht** abgeschlossen oder abgebrochen. Die Kompaktansicht zeigt keinen separaten Vermittlungsverlauf. Voraussetzung ist die [Vermittlungseinrichtung im Telefonprojekt](docs/TRANSFER_HANDOFF.md).
+
+## Was die Middleware übernimmt
+
+| Funktion | Verhalten |
+| --- | --- |
+| Anrufer erkennen | APS sucht nach der Rufnummer. Mehrere passende Patienten bleiben getrennt und werden zur Auswahl angeboten. |
+| Namen am Telefon anzeigen | Bei eindeutiger Zuordnung erhält Asterisk den Namen. Der Dialplan wartet vor dem Klingeln höchstens eine Sekunde; bei Fehlern oder Mehrdeutigkeit bleibt die Rufnummer erhalten. |
+| Patientenakte öffnen | Ein Patientenklick oder Aktenlink erzeugt `AUFRUFi.gdt` im Verzeichnis des gewählten Arbeitsplatzes. T2med übernimmt den Aktenaufruf. |
+| Wählen | Zuerst klingelt die eigene Nebenstelle. Nach dem Abheben wählt Asterisk die Zielnummer. |
+| Telefonie-App | Registrierte `tel:`-/`callto:`-Links wählen unter Windows, macOS und Linux ohne Rückfrage oder Browserfenster. |
+| Rückrufaufträge verwalten | **Nochmal versuchen**, **Löschen** und **Liste bereinigen** stehen für den gewählten Arbeitsplatz bereit. Löschen beendet keinen Anruf. |
+
+## Aufbau und Voraussetzungen
+
+Der zentrale Dienst läuft auf **Debian 12+, Ubuntu 24.04+ oder Raspberry Pi OS Bookworm+** mit systemd und PHP 8.2+. ReactPHP liefert die Weboberfläche selbst aus; eine Datenbank oder ein zusätzlicher Webserver ist nicht erforderlich.
+
+| Bestandteil | Aufgabe |
+| --- | --- |
+| Asterisk / kienzlefon | Gespräche, Warteschlangen, AMI und Dialplan. Die Asterisk-seitige Einrichtung erfolgt im [kienzlefon-Projekt](https://github.com/thomaskien/kienzlefon). |
+| T2med / APS | Patientensuche und Personendaten über den bestätigten APS-Suchendpunkt. |
+| Middleware | Verbindet AMI und APS, liefert die Webansicht aus und schreibt die GDT-Dateien. |
+| Arbeitsplatz | Browser, lokale Nebenstellenzuordnung und T2med-Kalenderanbindung zum jeweiligen GDT-Verzeichnis. |
+
+Asterisk, APS und Middleware dürfen auf demselben oder auf getrennten Servern laufen. Die Weboberfläche benötigt keine Anmeldung und ist für das abgeschottete Praxisnetz vorgesehen. Der Installer richtet die Guestfreigabe **`kienzlefon-GDT`** ein und erhält dabei bestehende Samba-Freigaben. Einzelheiten zu kompatiblen Samba-Einstellungen stehen in der [Installationsanleitung](docs/INSTALLATION.md#samba-und-gdt).
+
+## In Betrieb nehmen
+
+1. **Telefonserver vorbereiten:** AMI und Dialplan gemäß [Asterisk-Vertrag](docs/AMI_DIALPLAN.md) einrichten; für Vermittlung zusätzlich die [Transfer-Ergänzung](docs/TRANSFER_HANDOFF.md).
+2. **T2med-Zugang vorbereiten:** Einen für die Patientensuche geeigneten Benutzer verwenden. Die [APS-Einrichtung mit Screenshot der Rechteansicht](docs/INSTALLATION.md#t2med-benutzer-und-aps) beschreibt die Prüfung.
+3. **Middleware installieren:** Auf dem vorgesehenen Linux-Server ausführen:
+
+   ```sh
+   git clone https://github.com/thomaskien/kienzlefon-t2med.git
+   cd kienzlefon-t2med
+   sudo bash installer/install.sh
+   ```
+
+4. **Arbeitsplätze zuordnen:** Der Installer fragt pro Arbeitsplatz Client-ID, Bezeichnung, Nebenstelle und GDT-Verzeichnis ab. Anschließend die T2med-Kalenderanbindung auf dessen `AUFRUFi.gdt` einstellen.
+5. **Webansicht öffnen:** Die im Installer festgelegte Middleware-Adresse aufrufen, Arbeitsplatz auswählen und die Patientensuche mit einer bekannten Rufnummer prüfen. Für `tel:`-/`callto:`-Links im Menü **Telefonie-App einrichten** den passenden Client installieren.
+
+Der Installer fragt auch APS- und AMI-Server samt Zugangsdaten sowie die öffentliche Middleware-URL ab. Die Serverkonfiguration liegt in `/etc/kienzlefon-t2med/config.toml`; der Dienst heißt `kienzlefon-t2med.service`.
+
+Beispiel für die GDT-Freigabe:
 
 ```text
 kienzlefon-GDT/
@@ -44,46 +83,58 @@ kienzlefon-GDT/
   empfang-2/AUFRUFi.gdt
 ```
 
-In T2med wird die **Kalenderanbindung** für den jeweiligen Arbeitsplatz auf dessen Importdatei eingerichtet. Eine noch nicht abgeholte Datei wird atomar durch den neuesten Aktenaufruf ersetzt; dieser erscheint ohne zusätzliche Fehlermeldung im selben Arbeitsplatzverzeichnis. Die Webmeldung bestätigt die Dateiübergabe; die tatsächliche Anzeige der Akte erfolgt durch T2med.
+Client-ID, Nebenstelle und Verzeichnis gehören zusammen: `empfang-1` kann beispielsweise Nebenstelle `201` und das Verzeichnis `empfang-1` verwenden. Eine noch nicht importierte GDT-Datei wird durch den neuesten Aktenaufruf ersetzt. Die Webmeldung bestätigt die Dateiübergabe; die tatsächliche Aktenanzeige übernimmt T2med.
 
-## Demo und Entwicklung
+### Aktualisieren
+
+Im vorhandenen Projektverzeichnis auf dem Middleware-Server:
+
+```sh
+git pull --ff-only
+sudo bash installer/install.sh --keep-config
+```
+
+Anschließend die Webansicht neu laden. Für Änderungen an Arbeitsplätzen oder Verbindungen `--reconfigure` statt `--keep-config` verwenden. Ein normaler Installationslauf fragt bei vorhandener Konfiguration nach Änderungswünschen. Eine ältere Serverkonfiguration in JSON wird nach TOML übernommen; die ursprüngliche Datei bleibt erhalten. Bereits installierte Desktop-Clients werden mit ihrem jeweiligen [Client-Installer](docs/CLIENTS.md#aktualisierung-und-prüfung) aktualisiert.
+
+## Links in andere Oberflächen einbauen
+
+Basisadresse und Client-ID durch die eigene Einrichtung ersetzen. `telefon` enthält die URL-kodierte Rufnummer; ein führendes `+` wird zu `%2B`.
+
+**Direkt wählen, ohne zusätzliche Bestätigung:**
+
+```text
+http://middleware.example:8765/waehlen?client_id=empfang-1&telefon=%2B493055501111&sofort=1
+```
+
+**Patientenakte anhand der Rufnummer öffnen:**
+
+```text
+http://middleware.example:8765/patient-oeffnen?client_id=empfang-1&telefon=%2B493055501111
+```
+
+Bei mehreren Patiententreffern erscheint eine Auswahl. Neuladen und Zurücknavigation wiederholen keinen Auftrag. Die Weblinks öffnen eine Browserseite; für die Wahl ohne Browserfenster dienen die registrierten `tel:`-/`callto:`-Links. [Details zu Weblinks](docs/WEB.md#wähl--und-aktenlinks-für-kienzlefon)
+
+## Demo ohne Telefonanlage
+
+Für die Entwicklung oder zum Ausprobieren mit PHP und Composer:
 
 ```sh
 composer install
 php bin/server.php --demo --listen=127.0.0.1:8765
 ```
 
-Dann `http://127.0.0.1:8765/` öffnen. Die Demo verwendet ausschließlich fiktive Daten und erzeugt weder Telefonate noch GDT-Dateien. Der Schalter `--demo` gilt für den gesamten Prozess; eine URL kann einen produktiven Dienst nicht in den Demomodus umschalten.
+Danach `http://127.0.0.1:8765/` öffnen. Die Demo verwendet fiktive Daten und erzeugt weder Telefonate noch GDT-Dateien. Der Schalter `--demo` gilt für den gesamten Prozess; eine URL kann einen produktiven Dienst nicht in den Demomodus umschalten.
 
-## Schnittstellen
+## Weitere Dokumentation
 
-- [Architektur, Konfiguration und HTTP-API](docs/ARCHITECTURE.md)
-- [AMI- und Dialplan-Vertrag für den kienzlefon-Installer](docs/AMI_DIALPLAN.md)
-- [Tests und Abnahme](docs/TESTING.md)
+| Thema | Anleitung |
+| --- | --- |
+| Server, APS-Benutzer, Samba/GDT, Updates und Diagnose | [Installation und Betrieb](docs/INSTALLATION.md) |
+| Kompaktansicht, Patientenauswahl, Rückrufaufträge und Vermitteln | [Bedienung und Weblinks](docs/WEB.md) |
+| Registrierung als Telefonie-App | [Windows, macOS und Linux](docs/CLIENTS.md) |
+| AMI und Dialplan | [Vertrag für den kienzlefon-Installer](docs/AMI_DIALPLAN.md) |
+| Direkte Vermittlung und Rückfrage | [Ergänzung für das Telefonprojekt](docs/TRANSFER_HANDOFF.md) |
+| Konfiguration und HTTP-API | [Architektur](docs/ARCHITECTURE.md) |
+| Automatische Tests und praktische Abnahme | [Tests](docs/TESTING.md) |
 
-Client-IDs dürfen auch rein numerisch sein, z. B. `201`. Führende Nullen bleiben erhalten: `001` und `1` sind unterschiedliche Arbeitsplätze. In API-Anfragen ist `client_id` immer eine Zeichenkette, z. B. `"201"`.
-
-Einbettbarer Aktenlink, mit URL-kodierter Telefonnummer und registrierter Client-ID:
-
-```text
-http://middleware.example:8765/patient-oeffnen?client_id=empfang-1&telefon=%2B493055501111
-```
-
-Bei eindeutiger Zuordnung erfolgt die GDT-Übergabe, bei mehreren Kandidaten eine Auswahl. Ein bloßer GET liefert nur die Seite. Der Browser löst den schreibenden POST aus. Die Arbeitsplatzwahl wird lokal im Browser gespeichert.
-
-Direktwahl ohne zusätzliche Bestätigung, zum Einbau in die kienzlefon-Oberfläche:
-
-```text
-http://middleware.example:8765/waehlen?client_id=empfang-1&telefon=%2B493055501111&sofort=1
-```
-
-Zuerst klingelt die zugeordnete Nebenstelle, nach dem Abheben das Ziel. Ohne
-`sofort=1` erscheint die Wählbestätigung. Reload und Zurücknavigation wiederholen
-keinen Auftrag. [Weblinks und Bedienung](docs/WEB.md) ·
-[Windows/macOS/Linux-Registrierung](docs/CLIENTS.md).
-
-## Prüfstand
-
-PHP-Tests, simulierte AMI-/HTTPS-APS-Integration, GDT-Format, Installer-Konfigurations-/Samba-Planung, Rollback und Client-URI-Validierung sind automatisiert prüfbar. Die Weboberfläche wurde mit fiktiven Daten lokal geprüft. Eine echte Linux-Installation mit dem angepassten kienzlefon-Dialplan, SMB und T2med sowie die OS-Registrierung auf allen Arbeitsplatzsystemen sind Teil des anschließenden Praxistests.
-
-Der Anrufzustand und Auftragskennungen sind flüchtig. Bei ungewissem Click-to-Dial-Ergebnis zuerst das Telefon prüfen; es erfolgt keine automatische Wahlwiederholung. Nach einem Dienstneustart werden aktive Gespräche neu eingelesen, frühere Rückruf-Auftragskennungen aber nicht wiederhergestellt. Gesprächsdauer ist bei schon vor Dienststart bestehenden Gesprächen unbekannt; Kanalalter wird separat geliefert.
+Gesprächszustand und Auftragskennungen liegen im Arbeitsspeicher. Nach einem Dienstneustart werden aktive Gespräche neu eingelesen; frühere Rückrufaufträge werden nicht wiederhergestellt. Bei ungewissem Ergebnis erfolgt keine automatische Wahlwiederholung. Die Prüfung mit echter Telefonanlage, SMB und T2med ergänzt die automatisierten Tests mit simulierten Systemen.

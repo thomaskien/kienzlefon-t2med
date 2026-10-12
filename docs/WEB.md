@@ -1,10 +1,24 @@
 # Oberfläche und Weblinks
 
+[← Projektübersicht und Demovideo](../README.md) · [Installation](INSTALLATION.md) · [Desktop-Clients](CLIENTS.md)
+
+## Vollständige Übersicht
+
+Die vollständige Ansicht zeigt Warteschlangen, laufende Gespräche und den Status der Nebenstellen. Oben den eigenen Arbeitsplatz auswählen: Er bestimmt, welche Nebenstelle für Wahlaufträge verwendet wird und in welches Verzeichnis ein Aktenaufruf gelangt. **Kompaktansicht** wechselt zur kleinen Arbeitsplatzansicht.
+
+![Telefonieübersicht mit Arbeitsplatzwahl, Rufnummernsuche, Warteschlange und Nebenstellenstatus](images/telefonieuebersicht.png)
+
+*Die Screenshots zeigen einen früheren Oberflächenstand; hier ist Version 1.3.3 abgebildet. Die nachfolgende Bedienung beschreibt Version 1.3.6.*
+
 ## Kompaktansicht
 
 Standard ist die kompakte Ansicht; die letzte Ansicht wird pro Browser gespeichert.
 Ein direkter Einstieg ist `/?view=compact&client_id=empfang-1`. Für die vollständige
 Übersicht `/?view=full&client_id=empfang-1` verwenden oder unten „Übersicht“ wählen.
+
+![Kompaktansicht mit eigenen Gesprächen, Warteschlange und aufgeklappten Patientendetails](images/kompaktansicht.jpg)
+
+*Der Rückrufknopf in diesem älteren Screenshot ist seit 1.3.6 aus den Details laufender Anrufe entfernt. Die aktuelle Ansicht zeigt außerdem Version und Autor im Footer.*
 
 Die Kopfzeile zeigt eigene Nebenstelle, Wartende, verbundene Gespräche und
 Verbindungsstatus. DEMO bleibt erkennbar. Die Bereiche **Gespräche** und
@@ -41,6 +55,10 @@ Im Menü: Arbeitsplatzwechsel, Rufnummernsuche, Wählen, Rückrufaufträge und d
 Einrichtung der Desktop-Telefonie-App. Die Rückrufaufträge sind die vorhandene
 flüchtige Diensthistorie, keine dauerhafte Anrufliste.
 
+## Rückrufaufträge
+
+Das Menü öffnen; dort stehen die vorhandenen Aufträge im Bereich **Rückrufaufträge**. Die Liste zeigt die vom Dienst erfassten Wahlaufträge; sie ist keine Liste aller verpassten Anrufe und wird nach einem Dienstneustart nicht wiederhergestellt.
+
 Bei den Rückrufaufträgen stehen folgende Aktionen für den ausgewählten Arbeitsplatz zur Verfügung:
 
 - **Nochmal versuchen** startet mit einem bewussten Klick einen neuen Auftrag an dieselbe Nummer und Nebenstelle. Es erscheint keine zusätzliche Rückfrage. Die Aktion ist bei laufenden/ungewissen Aufträgen, belegter Nebenstelle oder veralteten Telefoniedaten gesperrt. Weitere Wiederholungen erfolgen vom neuen Eintrag aus.
@@ -54,6 +72,8 @@ Abgeschlossene Aufträge werden nach zehn Minuten automatisch entfernt. Ein erfo
 Die Kompaktansicht zeigt keinen separaten Bereich „Vermittlung“. Über **Übersicht** sind Verlauf und Steuerung einer laufenden Rückfrage weiterhin erreichbar.
 
 Ein kleiner seitlicher Pfeil am eigenen verbundenen Gespräch öffnet die Vermittlung. Eine andere Nebenstelle auswählen oder eine externe Rufnummer eingeben, danach **Direkt vermitteln** oder **Rückfrage starten** wählen. Das Öffnen des Dialogs allein verändert das Gespräch nicht. Fremde Gespräche und wartende Anrufe erhalten keine Vermittlungsaktion.
+
+![Vermittlungsdialog: internes oder externes Ziel auswählen und direkt oder mit Rückfrage vermitteln](images/vermittlung.jpg)
 
 Bei einer Rückfrage zeigt die Oberfläche den Verlauf auch dann weiter, wenn sich die Gesprächszeilen ändern. **Abschließen** wird erst nach bestätigter Verbindung mit dem tatsächlichen Ziel freigegeben; **Zurück zum Anrufer** bricht die Rückfrage ab. Asterisk muss den jeweiligen Ausgang bestätigen. Bei unbekanntem Ergebnis am Telefon prüfen; es wird kein Auftrag automatisch wiederholt. Arbeitsplatzwechsel, beendete Gespräche und veraltete Telefoniedaten sperren einen offenen Startdialog.
 
@@ -89,9 +109,11 @@ http://middleware.example:8765/waehlen?client_id=empfang-1&telefon=%2B4930555011
 Die sichtbare, frisch geöffnete Seite sendet einen Anrufauftrag. Zuerst klingelt
 die zugeordnete Nebenstelle; nach Annahme wählt Asterisk das Ziel. Ohne `sofort=1`
 erscheint die normale Wählbestätigung. Ein bloßer HTTP-GET startet keinen Anruf.
-Die Serverzuordnung der Client-ID bestimmt die Nebenstelle. Native registrierte
-Clients übergeben zusätzlich `expected_extension`; bei abweichender Zuordnung
-wird die automatische Aktion abgebrochen.
+Die Serverzuordnung der Client-ID bestimmt die Nebenstelle. Ein Weblink kann
+zusätzlich `expected_extension` angeben; bei abweichender Zuordnung wird die
+automatische Aktion abgebrochen. Die registrierten [Desktop-Clients](CLIENTS.md)
+prüfen Client-ID und Nebenstelle ebenfalls, senden ihren Auftrag jedoch direkt
+an die API und öffnen dabei keine Browserseite.
 
 **Patientenakte anhand einer Rufnummer öffnen:**
 
