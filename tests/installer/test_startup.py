@@ -9,7 +9,8 @@ ROOT = Path(__file__).resolve().parents[2]
 class StartupTests(unittest.TestCase):
     def run_startup(self, *, start=0, active=0, journal=0, was_active=0):
         source = (ROOT / 'installer/install.sh').read_text()
-        function = source[source.index('start_middleware() {'):source.index('\nwhile [ "$#"')]
+        function_start = source.index('start_middleware() {')
+        function = source[function_start:source.index('\n}\n', function_start) + 3]
         script = f'''set -eu
 SERVICE_WAS_ACTIVE={was_active}
 fail() {{ printf 'FAILED: %s\\n' "$*" >&2; exit 1; }}
