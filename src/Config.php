@@ -96,6 +96,7 @@ final class Config
         foreach ($t['extensions'] as $id => $label) { self::extension((string)$id); self::text($label, 128); }
         if (!is_string($t['country_code']) || !preg_match('/^[1-9][0-9]{0,3}$/D', $t['country_code'])) throw new \InvalidArgumentException('Ungültiger Ländercode.');
         if (!is_string($t['originate_context']) || !preg_match('/^[a-zA-Z0-9_-]{1,80}$/D', $t['originate_context'])) throw new \InvalidArgumentException('Ungültiger Originate-Kontext.');
+        if (!is_string($t['transfer_context']) || !preg_match('/^[a-zA-Z0-9_-]{1,80}$/D', $t['transfer_context'])) throw new \InvalidArgumentException('Ungültiger Transfer-Kontext.');
         self::integer($t['originate_timeout_ms'], 1000, 120000);
         self::text($c['gdt']['root'], 2048);
         if (!str_starts_with($c['gdt']['root'], '/') || rtrim($c['gdt']['root'], '/') === '') throw new \InvalidArgumentException('GDT-Root muss ein absolutes Datenverzeichnis sein.');

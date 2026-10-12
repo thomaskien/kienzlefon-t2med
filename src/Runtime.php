@@ -13,6 +13,7 @@ final class Runtime
     private ?Ami $ami = null;
     private ?Aps $aps = null;
     private Gdt $gdt;
+    private Transfers $transfers;
     private array $lookups = [];
     private array $phoneLookups = [];
     private array $jobs = [];
@@ -24,6 +25,7 @@ final class Runtime
         $this->state = new Telephony($config['telephony']);
         $this->gdt = new Gdt($config['gdt'], $config['clients']);
         if (!$demo) { $this->ami = new Ami($config['ami']); $this->aps = new Aps($config['aps'], $config['telephony']['country_code']); }
+        $this->transfers = new Transfers($this->state, fn(string $action, array $fields) => $this->ami->action($action,$fields), $config, $demo);
     }
     public function start(): void
     {
@@ -31,6 +33,7 @@ final class Runtime
         $this->ami->on('connected', fn() => $this->synchronize());
         $this->ami->on('disconnected', function () {
             $this->syncing = false; $this->state->disconnect(); $this->jobs = [];
+            $this->transfers->disconnect();
             foreach ($this->outgoing as &$call) if (!in_array($call['phase'], ['ended','failed'], true)) $call['phase'] = 'unknown';
             unset($call);
         });
@@ -45,7 +48,7 @@ final class Runtime
         if ($this->syncing || !$this->ami?->connected()) return;
         $this->syncing = true; $this->state->beginSync();
         all([$this->ami->action('CoreShowChannels', [], 'CoreShowChannelsComplete'), $this->ami->action('QueueStatus', [], 'QueueStatusComplete')])->then(function ($snapshots) {
-            $this->state->finishSync($snapshots[0], $snapshots[1]); $this->syncing = false; $this->refreshLookups();
+            $this->state->finishSync($snapshots[0], $snapshots[1]); $this->syncing = false; $this->transfers->event([]); $this->refreshLookups();
         }, function () { $this->syncing = false; $this->ami?->disconnect(); });
     }
     private function refreshLookups(): void
@@ -132,6 +135,7 @@ final class Runtime
     }
     private function onEvent(array $e): void
     {
+        $this->transfers->event($e);
         $event = $e['Event'] ?? '';
         if ($event === 'UserEvent' && ($e['UserEvent'] ?? '') === 'KienzlefonLookupRequest') $this->phoneName($e);
         if ($event === 'UserEvent' && ($e['UserEvent'] ?? '') === 'KienzlefonLookupFinished') unset($this->jobs[$e['SourceUniqueid'] ?? '']);
@@ -206,9 +210,24 @@ final class Runtime
             }
         }
         unset($call);
+        foreach ($view['calls'] as &$call) {
+            $call['transfer_extensions'] = [];
+            if ($call['state'] !== 'connected') continue;
+            foreach ($call['extensions'] as $extension) {
+                if ($this->transfers->busy($extension)) continue;
+                if (!$this->demo) {
+                    try { $this->state->transferPair($call['id'],$extension); } catch (\RuntimeException) { continue; }
+                }
+                $call['transfer_extensions'][] = $extension;
+            }
+        }
+        unset($call);
         $view['outgoing'] = array_values(array_map($this->publicOutgoing(...), $this->outgoing));
+        $view['transfers'] = $this->transfers->view();
         return $view;
     }
+    public function transfer(array $input): PromiseInterface { return $this->transfers->start($input); }
+    public function transferControl(string $id, string $action, array $input): PromiseInterface { return $this->transfers->control($id,$action,$input); }
     private function publicOutgoing(array $call): array { return array_filter($call, fn($k) => !str_starts_with($k, '_'), ARRAY_FILTER_USE_KEY); }
     private function client(mixed $id): array
     {

@@ -79,7 +79,11 @@ class AMIHandler(socketserver.BaseRequestHandler):
                         action[key] = value.strip()
                     self.server.actions.append(action)
                     aid = action['ActionID']
-                    self.server.send({'Response': 'Success', 'ActionID': aid})
+                    reply = {'Response': 'Success', 'ActionID': aid}
+                    if action['Action'] == 'Getvar':
+                        variable = action.get('Variable', '')
+                        reply['Value'] = self.server.variables.get(variable, '1' if variable.startswith('DIALPLAN_EXISTS(') else '')
+                    self.server.send(reply)
                     if action['Action'] == 'CoreShowChannels':
                         if self.server.snapshot_race:
                             self.server.send({'Event': 'Hangup', 'Uniqueid': 'gone', 'Channel': 'PJSIP/trunk-gone'})
@@ -102,6 +106,7 @@ class AMIServer(socketserver.ThreadingTCPServer):
         self.lock = threading.Lock()
         self.connection = None
         self.snapshot_race = False
+        self.variables = {'KF_TRANSFER_READY': '1', 'FEATUREMAP(atxfer)': '*2', 'FEATURE(atxferabort)': '*3', 'FEATURE(atxfercomplete)': '*4'}
 
     def send_raw(self, data):
         with self.lock:
@@ -202,22 +207,34 @@ class MiddlewareIntegration(unittest.TestCase):
         self.assertTrue(all(p['ignoreSichtbarkeit'] is False for p in self.aps.requests))
         self.assertTrue(all('_ref' not in p for p in result['patients']))
 
-    def test_02_gdt_selection_no_overwrite_and_idempotency(self):
+    def test_02_gdt_selection_replacement_and_idempotency(self):
         lookup = self.lookup('03055501022')
         request = {'client_id': 'empfang-1', 'lookup_id': lookup['lookup_id'], 'patient_number': 90002, 'request_id': str(uuid.uuid4())}
         target = self.share / 'empfang-1' / 'AUFRUFi.gdt'
         status, result = self.request('/api/v1/patient-open', request)
         self.assertEqual(status, 200)
+        self.assertEqual(result['status'], 'sent')
         data = target.read_bytes()
         self.assertIn(b'014300090002\r\n', data)
         self.assertNotIn(b'Patient', data)
         for line in data.splitlines(keepends=True):
             self.assertEqual(int(line[:3]), len(line))
-        self.assertEqual(self.request('/api/v1/patient-open', {**request, 'request_id': str(uuid.uuid4())})[0], 503)
-        target.unlink()  # Simulated consumption by T2med.
+
+        newer = {**request, 'patient_number': 90001, 'request_id': str(uuid.uuid4())}
+        self.assertEqual(self.request('/api/v1/patient-open', newer)[0], 200)
+        newer_data = target.read_bytes()
+        self.assertIn(b'014300090001\r\n', newer_data)
+        self.assertNotIn(b'014300090002\r\n', newer_data)
+
         self.assertEqual(self.request('/api/v1/patient-open', request), (status, result))
-        self.assertFalse(target.exists())
-        self.assertEqual(self.request('/api/v1/patient-open', {**request, 'client_id': 'empfang-2'})[0], 200)
+        self.assertEqual(target.read_bytes(), newer_data)
+        target.unlink()  # Simulated consumption by T2med.
+        after_consumption = {**request, 'request_id': str(uuid.uuid4())}
+        self.assertEqual(self.request('/api/v1/patient-open', after_consumption)[0], 200)
+        self.assertIn(b'014300090002\r\n', target.read_bytes())
+        target.unlink()
+
+        self.assertEqual(self.request('/api/v1/patient-open', {**request, 'client_id': 'empfang-2', 'request_id': str(uuid.uuid4())})[0], 200)
         (self.share / 'empfang-2' / 'AUFRUFi.gdt').unlink()
         self.assertEqual(self.request('/api/v1/patient-open', {**request, 'patient_number': 99999, 'request_id': str(uuid.uuid4())})[0], 400)
         self.assertEqual(self.request('/api/v1/patient-open', {**request, 'client_id': '../other'})[0], 400)
@@ -241,8 +258,8 @@ class MiddlewareIntegration(unittest.TestCase):
                 self.assertEqual(len(self.aps.requests), after_first)
 
     def test_02_version_is_available_without_patient_lookup(self):
-        self.assertEqual(self.request('/api/v1/bootstrap')[1]['version'], '1.3')
-        self.assertEqual(self.request('/healthz')[1]['version'], '1.3')
+        self.assertEqual(self.request('/api/v1/bootstrap')[1]['version'], '1.3.1')
+        self.assertEqual(self.request('/healthz')[1]['version'], '1.3.1')
 
     def test_03_http_controls_and_read_only_link(self):
         self.assertEqual(self.request('/api/v1/lookup', {'number': '03055501111'}, {'Origin': 'https://foreign.example'})[0], 403)
@@ -353,6 +370,87 @@ class MiddlewareIntegration(unittest.TestCase):
         self.ami.send({'Event': 'QueueCallerLeave', 'Queue': 'test-praxis', 'Uniqueid': 'queue-test', 'Channel': 'PJSIP/trunk-queue-test'})
         wait_for(lambda: queue_view()[1]['waiting_count'] == 0)
         self.assertEqual(queue_view()[1]['entries'], [])
+
+    def transfer_pair(self, prefix):
+        source, peer = prefix + '-staff', prefix + '-peer'
+        for uid, channel in [(peer, 'PJSIP/trunk-' + prefix), (source, 'PJSIP/201-00ab')]:
+            self.ami.send({'Event': 'Newchannel', 'Uniqueid': uid, 'Linkedid': peer, 'Channel': channel, 'ChannelStateDesc': 'Up', 'CallerIDNum': '03055508888'})
+            self.ami.send({'Event': 'BridgeEnter', 'Uniqueid': uid, 'BridgeUniqueid': prefix + '-original', 'Channel': channel, 'ChannelStateDesc': 'Up'})
+        wait_for(lambda: any(c['id'] == peer and c['transfer_extensions'] == ['201'] for c in self.request('/api/v1/telephony')[1]['calls']))
+        return source, peer
+
+    def transfer_job(self, request_id):
+        return next(j for j in self.request('/api/v1/telephony')[1]['transfers'] if j['request_id'] == request_id)
+
+    def test_09_direct_transfer_is_bound_to_own_call_and_idempotent(self):
+        source, peer = self.transfer_pair('blind')
+        request = {'client_id': 'empfang-1', 'call_id': peer, 'target_type': 'internal', 'target': '202', 'mode': 'blind', 'request_id': str(uuid.uuid4())}
+        self.assertEqual(self.request('/api/v1/transfers', {**request, 'client_id': 'empfang-2', 'target': '201'})[0], 503)
+        self.assertEqual(self.request('/api/v1/transfers', request, {'Origin': 'https://foreign.example'})[0], 403)
+        start = len(self.ami.actions)
+        status, job = self.request('/api/v1/transfers', request)
+        self.assertEqual(status, 202)
+        self.assertEqual(job['phase'], 'transferred')
+        actions = self.ami.actions[start:]
+        native = [a for a in actions if a['Action'] == 'BlindTransfer']
+        self.assertEqual(len(native), 1)
+        self.assertEqual((native[0]['Channel'], native[0]['Context'], native[0]['Exten']), ('PJSIP/201-00ab', 'kienzlefon-transfer', '202'))
+        metadata = [a for a in actions if a['Action'] == 'Setvar' and a['Variable'] == '__KF_TRANSFER_SOURCE_UID']
+        self.assertEqual({a['Channel'] for a in metadata}, {'PJSIP/201-00ab', 'PJSIP/trunk-blind'})
+        self.assertEqual({a['Value'] for a in metadata}, {source})
+        self.assertFalse(any(k.startswith('_') for k in job))
+        self.assertEqual(self.request('/api/v1/transfers', request)[1], job)
+        self.assertEqual(len([a for a in self.ami.actions[start:] if a['Action'] == 'BlindTransfer']), 1)
+        self.assertEqual(self.request('/api/v1/transfers', {**request, 'target': '201'})[0], 400)
+        for uid in [source, peer]: self.ami.send({'Event': 'Hangup', 'Uniqueid': uid})
+
+    def test_10_external_consultation_completion_waits_for_native_event(self):
+        source, peer = self.transfer_pair('attended')
+        request = {'client_id': 'empfang-1', 'call_id': peer, 'target_type': 'external', 'target': '+493055501111', 'mode': 'attended', 'request_id': str(uuid.uuid4())}
+        status, job = self.request('/api/v1/transfers', request)
+        self.assertEqual((status, job['phase']), (202, 'requested'))
+        action = next(a for a in reversed(self.ami.actions) if a['Action'] == 'Atxfer')
+        self.assertEqual(action['Exten'], '00493055501111')
+        control = {'client_id': 'empfang-1', 'request_id': str(uuid.uuid4())}
+        endpoint = '/api/v1/transfers/' + request['request_id'] + '/complete'
+        self.assertEqual(self.request(endpoint, control)[0], 503)
+        self.ami.send({'Event': 'UserEvent', 'UserEvent': 'KienzlefonTransferProgress', 'SchemaVersion': '1', 'RequestId': request['request_id'], 'TransfererUniqueid': source, 'SourceUniqueid': 'attended-route', 'Phase': 'dialing_target'})
+        self.ami.send({'Event': 'BridgeLeave', 'Uniqueid': source})
+        self.ami.send({'Event': 'DialBegin', 'Uniqueid': 'attended-route', 'DestUniqueid': 'attended-target', 'DestChannel': 'PJSIP/transfer-provider-00bb', 'Linkedid': peer})
+        wait_for(lambda: self.transfer_job(request['request_id'])['can_cancel'])
+        self.assertFalse(self.transfer_job(request['request_id'])['can_complete'])
+        self.ami.send({'Event': 'BridgeEnter', 'Uniqueid': source, 'BridgeUniqueid': 'attended-consult', 'ChannelStateDesc': 'Up'})
+        self.ami.send({'Event': 'BridgeEnter', 'Uniqueid': 'attended-target', 'BridgeUniqueid': 'attended-consult', 'ChannelStateDesc': 'Ringing'})
+        self.assertFalse(self.transfer_job(request['request_id'])['can_complete'])
+        self.ami.send({'Event': 'Newstate', 'Uniqueid': 'attended-target', 'ChannelStateDesc': 'Up'})
+        wait_for(lambda: self.transfer_job(request['request_id'])['can_complete'])
+        start = len(self.ami.actions)
+        self.assertEqual(self.request(endpoint, control)[1]['phase'], 'completing')
+        self.request(endpoint, control)
+        digits = [a for a in self.ami.actions[start:] if a['Action'] == 'PlayDTMF']
+        self.assertEqual([a['Digit'] for a in digits], ['*', '4'])
+        self.assertTrue(all(a['Receive'] == 'true' and a['Channel'] == 'PJSIP/201-00ab' for a in digits))
+        self.assertFalse(any(a['Action'] == 'Hangup' for a in self.ami.actions[start:]))
+        self.ami.send({'Event': 'AttendedTransfer', 'Result': 'Success', 'OrigTransfererUniqueid': source, 'TransfereeUniqueid': peer, 'DestType': 'Bridge'})
+        wait_for(lambda: self.transfer_job(request['request_id'])['phase'] == 'transferred')
+        for uid in [source, peer, 'attended-target']: self.ami.send({'Event': 'Hangup', 'Uniqueid': uid})
+
+    def test_11_consultation_cancel_requires_returned_original_bridge(self):
+        source, peer = self.transfer_pair('cancel')
+        request = {'client_id': 'empfang-1', 'call_id': peer, 'target_type': 'internal', 'target': '202', 'mode': 'attended', 'request_id': str(uuid.uuid4())}
+        self.request('/api/v1/transfers', request)
+        self.ami.send({'Event': 'UserEvent', 'UserEvent': 'KienzlefonTransferProgress', 'SchemaVersion': '1', 'RequestId': request['request_id'], 'TransfererUniqueid': source, 'SourceUniqueid': 'cancel-route', 'Phase': 'dialing_target'})
+        self.ami.send({'Event': 'BridgeLeave', 'Uniqueid': source})
+        wait_for(lambda: self.transfer_job(request['request_id'])['can_cancel'])
+        endpoint = '/api/v1/transfers/' + request['request_id'] + '/cancel'
+        control = {'client_id': 'empfang-1', 'request_id': str(uuid.uuid4())}
+        start = len(self.ami.actions)
+        self.assertEqual(self.request(endpoint, control)[1]['phase'], 'cancelling')
+        self.request(endpoint, control)
+        self.assertEqual(len([a for a in self.ami.actions[start:] if a['Action'] == 'CancelAtxfer']), 1)
+        self.ami.send({'Event': 'BridgeEnter', 'Uniqueid': source, 'BridgeUniqueid': 'cancel-original', 'ChannelStateDesc': 'Up'})
+        wait_for(lambda: self.transfer_job(request['request_id'])['phase'] == 'cancelled')
+        for uid in [source, peer]: self.ami.send({'Event': 'Hangup', 'Uniqueid': uid})
 
 
 if __name__ == '__main__':

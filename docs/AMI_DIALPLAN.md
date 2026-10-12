@@ -15,7 +15,7 @@ read = system,call,agent,user,dialplan
 write = call,originate,reporting
 ```
 
-AMI aktiviert, Port konfigurierbar (üblich 5038), vom Middleware-Server erreichbar. Middleware meldet sich mit `Events: on` an. Benötigte Aktionen: `Login`, `Ping`, `CoreShowChannels`, `QueueStatus`, `Setvar`, `Originate`. Kein `Command`-/Konfigurationszugriff. `call` erlaubt Setvar, `originate` Originate, `reporting` die Bestandsabfrage. AMI-Kategorien sind gröber als einzelne Aktionen; die Anwendung begrenzt ihre eigenen Aktionen zusätzlich.
+AMI aktiviert, Port konfigurierbar (üblich 5038), vom Middleware-Server erreichbar. Middleware meldet sich mit `Events: on` an. Benötigte Aktionen: `Login`, `Ping`, `CoreShowChannels`, `QueueStatus`, `Setvar`, `Originate`. Für Vermittlung zusätzlich `Getvar`, `BlindTransfer`, `Atxfer`, `CancelAtxfer` und `PlayDTMF`; Einrichtung und Ereignisse gemäß [Transfer-Übergabe](TRANSFER_HANDOFF.md). Kein `Command`-/Konfigurationszugriff. `call` erlaubt Setvar, `originate` Originate, `reporting` die Bestandsabfrage. AMI-Kategorien sind gröber als einzelne Aktionen; die Anwendung begrenzt ihre eigenen Aktionen zusätzlich.
 
 ## Eingehende Anrufe
 

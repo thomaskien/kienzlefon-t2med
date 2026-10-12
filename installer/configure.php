@@ -192,6 +192,7 @@ function buildConfig(array $answers, ?array $existing = null): array
             'extensions' => $extensions,
             'country_code' => '49',
             'originate_context' => 'kienzlefon-click-to-dial',
+            'transfer_context' => 'kienzlefon-transfer',
             'originate_timeout_ms' => 20000,
         ],
         'gdt' => [
@@ -224,7 +225,7 @@ function validateConfig(array $config): array
         'http' => ['listen', 'public_url', 'allowed_hosts', 'allowed_networks'],
         'ami' => ['host', 'port', 'username', 'secret', 'tls', 'ca_file'],
         'aps' => ['url', 'username', 'password', 'tls_verify', 'ca_file', 'timeout_seconds', 'cache_seconds'],
-        'telephony' => ['queues', 'extensions', 'country_code', 'originate_context', 'originate_timeout_ms'],
+        'telephony' => ['queues', 'extensions', 'country_code', 'originate_context', 'originate_timeout_ms', 'transfer_context'],
         'gdt' => ['root', 'filename', 'sender', 'receiver'],
     ];
     $expectedTop = array_merge(array_keys($schema), ['clients']);

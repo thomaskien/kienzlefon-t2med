@@ -12,10 +12,12 @@ Kein Benutzerlogin. Netzwerkbereich und erlaubte Hostnamen sind konfiguriert. Br
 
 - `GET /api/v1/bootstrap`: `token`, `clients` als Liste `{id,label,extension}`, `demo`, `version`.
 - `GET /healthz`: `status`, `demo`, `version`. CLI-Version: `php bin/server.php --version`.
-- `GET /api/v1/telephony`: `generated_at`, `ami_connected`, `stale`, `calls`, `queues`, `extensions`, `outgoing`.
+- `GET /api/v1/telephony`: `generated_at`, `ami_connected`, `stale`, `calls`, `queues`, `extensions`, `outgoing`, `transfers`. Verbundene Anrufe enthalten `transfer_extensions` mit den aktuell eindeutig zugeordneten, bedienbaren Nebenstellen.
 - `POST /api/v1/lookup` mit `{number}`: `{lookup_id,number,status,patients}`. Patienten enthalten `patient_number`, `first_name`, `last_name`, `birth_date`, `address`; interne Referenzen bleiben für die Auswahlprüfung im Dienst.
-- `POST /api/v1/patient-open` mit `{client_id,lookup_id,patient_number,request_id}`: ausgewählten Kandidaten als GDT schreiben. Nur zum Lookup gehörende, eindeutig identifizierbare Patientennummern akzeptieren. Noch nicht konsumierte Datei nicht überschreiben. `request_id` ist eine UUID und dient der Wiederholungserkennung.
+- `POST /api/v1/patient-open` mit `{client_id,lookup_id,patient_number,request_id}`: ausgewählten Kandidaten als GDT schreiben. Nur zum Lookup gehörende, eindeutig identifizierbare Patientennummern akzeptieren. Eine noch nicht konsumierte Datei atomar durch den neuen Aufruf ersetzen. `request_id` ist eine UUID und dient der Wiederholungserkennung.
 - `POST /api/v1/calls` mit `{client_id,extension,number,request_id}`: Nebenstelle muss zur serverseitigen Client-Zuordnung passen. Erst Nebenstelle, dann Ziel anrufen. HTTP 202 bedeutet angenommen, nicht verbunden.
+- `POST /api/v1/transfers` mit `{client_id,call_id,target_type,target,mode,request_id}`: `target_type` ist `internal` oder `external`, `mode` ist `blind` oder `attended`. Die Middleware ermittelt den eigenen Gesprächskanal selbst. Keine frei übergebenen AMI-Kanalnamen. HTTP 202 liefert den Auftrag samt aktuellem Zustand.
+- `POST /api/v1/transfers/{UUID}/complete` oder `/cancel` mit `{client_id,request_id}`: Rückfrage abschließen oder zum Anrufer zurückkehren, nur wenn die serverseitigen Zustandsmerkmale dies erlauben.
 - `GET /patient-oeffnen?client_id=empfang-1&telefon=…`: Einstiegsseite für den Weblink. Der bloße GET schreibt keine Datei. Die Oberfläche verarbeitet eine aktive Navigation, löst den Lookup aus und bei eindeutigem Treffer den POST; mehrere Kandidaten erfordern Auswahl.
 - `GET /waehlen?client_id=empfang-1&telefon=…`: Einstiegsseite mit Wählbestätigung.
 - `GET /waehlen?client_id=empfang-1&telefon=…&sofort=1`: explizite Direktwahl. Nach frischer Navigation in sichtbarer, nicht vorgerenderter Seite genau einen Anruf-POST auslösen; kein Bestätigungsdialog. Aktionsparameter vor der ersten Netzwerkanfrage aus der Browserhistorie entfernen, damit Reload/Zurück keinen neuen Auftrag erzeugt. Bloßer GET bleibt lesend. Jede erneute bewusst geöffnete vollständige Direktwahl-URL ist ein neuer Wahlauftrag.
@@ -41,9 +43,15 @@ Lookup-UserEvent: `KienzlefonLookupRequest`, `SchemaVersion: 1`, `RequestId`, `S
 
 Click-to-Dial: `Originate` mit `PJSIP/<extension>`, `Context` aus Konfiguration, `Exten` als normalisierte Zielnummer, `Priority: 1`, `Async: true`, `Timeout: 20000`, `EarlyMedia: false`, eigenem `ChannelId`. Variablen `__KF_C2D_ID`, `__KF_C2D_CLIENT`, `__KF_C2D_EXTENSION`. Dialplan meldet `KienzlefonClickToDialProgress` mit `RequestId`, `Phase: dialing_target`, `SourceUniqueid`. Eigentliche Verbindung erst nach Antwort des zweiten Rufabschnitts und Brücke melden. Kein automatisches Wiederholen bei ungewissem Ergebnis.
 
+## Vermittlungszustand
+
+`transfers` enthält `request_id`, `client_id`, `call_id`, `extension`, `target_type`, `target`, `mode`, `phase`, `message`, `created_at`, `can_cancel`, `can_complete`. Phasen: `preparing`, `requested`, `ringing`, `consulting`, `completing`, `cancelling`, `transferred`, `cancelled`, `failed`, `unknown`. Die Ansicht bleibt auch bei einer geänderten logischen Gesprächs-ID verfügbar. Serverseitig werden ursprüngliche Uniqueids, die tatsächliche Zielverbindung und Local-Zwischenkanäle verfolgt.
+
+Start- und Steueraufträge verwenden UUIDs zur Wiederholungserkennung. Neue UUIDs sind neue bewusste Bedienaktionen. Ein ungewisser Auftrag wird nicht automatisch erneut gesendet und blockiert weitere Vermittlung desselben laufenden Gesprächs. Bestätigter AMI-Auftrag und bestätigte Gesprächsverbindung sind getrennt. Details zur nötigen Asterisk-Einrichtung: [Transfer-Übergabe](TRANSFER_HANDOFF.md).
+
 ## GDT und Clients
 
-Share `kienzlefon-GDT`, Guest ohne Anmeldung. Pro Client ein vorab konfiguriertes Unterverzeichnis, darin `AUFRUFi.gdt`. ID-only Satztyp 6301 mit korrekten Byte-Längen und CRLF. Temporäre Datei auf demselben Dateisystem und atomare Veröffentlichung ohne Überschreiben einer vorhandenen Datei. T2med überwacht pro Arbeitsplatz den zugehörigen SMB-Pfad über die Kalenderanbindung.
+Share `kienzlefon-GDT`, Guest ohne Anmeldung. Pro Client ein vorab konfiguriertes Unterverzeichnis, darin `AUFRUFi.gdt`. ID-only Satztyp 6301 mit korrekten Byte-Längen und CRLF. Temporäre Datei auf demselben Dateisystem und atomare Veröffentlichung per Rename; eine vorhandene Importdatei wird vollständig ersetzt. T2med überwacht pro Arbeitsplatz den zugehörigen SMB-Pfad über die Kalenderanbindung.
 
 Linux-Installer installiert Dienst, fragt Verbindungsdaten verdeckt ab, legt geschützte Konfiguration an und ergänzt Samba additiv. Bestehende Shares/Benutzer/Globaleinstellungen erhalten. Falls ein bestehender Samba-Server Guest nicht unterstützt, keine globale Authentifizierung eigenmächtig ändern; Konflikt vor Änderungen melden und dokumentierte separate Freigabe ermöglichen.
 

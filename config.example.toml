@@ -29,6 +29,7 @@ cache_seconds = 120
 queues = []
 country_code = "49"
 originate_context = "kienzlefon-click-to-dial"
+transfer_context = "kienzlefon-transfer"
 originate_timeout_ms = 20000
 
 # Nebenstellennummern sind ausdrücklich als TOML-Stringschlüssel notiert.

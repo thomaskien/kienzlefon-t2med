@@ -45,6 +45,8 @@ final class HttpApi
                 }
                 if ($path === '/api/v1/patient-open') return self::json($this->runtime->openPatient($input));
                 if ($path === '/api/v1/calls') return $this->runtime->originate($input)->then(static fn($call) => self::json($call, 202), self::failure(...));
+                if ($path === '/api/v1/transfers') return $this->runtime->transfer($input)->then(static fn($job) => self::json($job, 202), self::failure(...));
+                if (preg_match('~^/api/v1/transfers/([a-fA-F0-9-]{36})/(cancel|complete)$~D',$path,$match)) return $this->runtime->transferControl($match[1],$match[2],$input)->then(static fn($job) => self::json($job,202),self::failure(...));
                 return self::json(['error'=>'Endpunkt nicht gefunden.'], 404);
             }
             if ($method !== 'GET' && $method !== 'HEAD') return self::json(['error'=>'Methode nicht erlaubt.'], 405);

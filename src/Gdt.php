@@ -35,11 +35,8 @@ final class Gdt
             try {
                 if (fwrite($file, $payload) !== strlen($payload) || !fflush($file) || !fsync($file)) throw new \RuntimeException('GDT-Datei konnte nicht vollständig geschrieben werden.');
             } finally { fclose($file); }
-            chmod($temp, 0660);
-            if (!@link($temp, $target)) {
-                if (file_exists($target) || is_link($target)) throw new \RuntimeException('T2med hat den vorherigen Aufruf noch nicht abgeholt.');
-                throw new \RuntimeException('GDT-Datei konnte nicht veröffentlicht werden.');
-            }
+            if (!chmod($temp, 0660)) throw new \RuntimeException('GDT-Dateiberechtigungen konnten nicht gesetzt werden.');
+            if (!@rename($temp, $target)) throw new \RuntimeException('GDT-Datei konnte nicht veröffentlicht werden.');
         } finally { @unlink($temp); }
         return ['status'=>'sent', 'message'=>'Aufruf an T2med übergeben.'];
     }

@@ -3,8 +3,9 @@ const $ = id => document.getElementById(id);
 const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
 const labels = {pending:'Patient wird gesucht …', resolved:'Zugeordnet', ambiguous:'Mehrere mögliche Patienten · bitte auswählen', not_found:'Kein Patient gefunden', timeout:'Suche hat zu lange gedauert', error:'Patientensuche derzeit nicht erreichbar', requested:'Auftrag angenommen', ringing_extension:'Nebenstelle klingelt', dialing_target:'Ziel wird gewählt', ringing_target:'Ziel klingelt', connected:'Verbunden', ended:'Beendet', failed:'Nicht verbunden', unknown:'Ergebnis ungewiss · Telefon prüfen', demo:'Demo · kein Anruf ausgelöst'};
 const extensionLabels = {busy:'Im Gespräch',ringing:'Klingelt',idle:'Frei',offline:'Nicht erreichbar',unknown:'Status unbekannt'};
-let token = '', clients = [], demo = false, polling = false, toastTimer, pollTimer, latestSearch = null, latestData = null, pendingDial = null, dialBusy = false, compact = true;
-const opening = new Set(), requestIds = new Map(), expanded = new Set();
+const transferLabels = {preparing:'Vermittlung wird vorbereitet',requested:'Vermittlung angefordert',ringing:'Ziel klingelt',consulting:'Rückfrage läuft',completing:'Vermittlung wird abgeschlossen',cancelling:'Rückkehr zum Anrufer läuft',transferred:'Gespräch vermittelt',cancelled:'Zurück beim Anrufer',failed:'Vermittlung fehlgeschlagen',unknown:'Status ungewiss · Telefon prüfen'};
+let token = '', clients = [], demo = false, polling = false, toastTimer, pollTimer, latestSearch = null, latestData = null, pendingDial = null, pendingTransfer = null, dialBusy = false, transferStartBusy = false, compact = true;
+const opening = new Set(), requestIds = new Map(), expanded = new Set(), transferActions = new Set(), transferRequestIds = new Map(), transferControlIds = new Map(), knownTransfers = new Map();
 const query = new URLSearchParams(location.search);
 const uuid = () => { const b = crypto.getRandomValues(new Uint8Array(16)); b[6] = (b[6] & 15) | 64; b[8] = (b[8] & 63) | 128; const s = Array.from(b, n => n.toString(16).padStart(2,'0')).join(''); return `${s.slice(0,8)}-${s.slice(8,12)}-${s.slice(12,16)}-${s.slice(16,20)}-${s.slice(20)}`; };
 const clockDuration = n => n == null ? '–:–' : `${Math.floor(Math.max(0,n) / 60)}:${String(Math.floor(Math.max(0,n) % 60)).padStart(2,'0')}`;
@@ -31,7 +32,7 @@ async function api(path, data) {
     const response = await fetch(path,options), value = await response.json();
     if (!response.ok) throw new Error(value.error || 'Anfrage fehlgeschlagen.');
     return value;
-  } catch(e) { if (e.name === 'AbortError') throw new Error('Keine rechtzeitige Antwort. Bei einem Rückruf zuerst das Telefon prüfen.'); throw e; }
+  } catch(e) { if (e.name === 'AbortError') throw new Error('Keine rechtzeitige Antwort. Vor einem erneuten Versuch zuerst das Telefon prüfen.'); throw e; }
   finally { clearTimeout(timer); }
 }
 // Keep existing keyed rows and controls in place; polling never calls focus().
@@ -93,7 +94,7 @@ async function openPatient(lookupId, patient, button) {
   if (opening.has(key)) return;
   opening.add(key); if (button) button.disabled = true;
   if (!requestIds.has(key)) requestIds.set(key,uuid());
-  try { const result = await api('/api/v1/patient-open',{client_id:client.id,lookup_id:lookupId,patient_number:patient.patient_number,request_id:requestIds.get(key)}); toast(result.message); const sentId = requestIds.get(key); setTimeout(() => { if (requestIds.get(key) === sentId) requestIds.delete(key); },2000); }
+  try { const result = await api('/api/v1/patient-open',{client_id:client.id,lookup_id:lookupId,patient_number:patient.patient_number,request_id:requestIds.get(key)}); toast(result.message); requestIds.delete(key); }
   catch(e) { toast(e.message,true); }
   finally { opening.delete(key); if (button) button.disabled = false; }
 }
@@ -115,11 +116,22 @@ function patientList(lookupId,patients,status) {
   });
   wrapper.append(list); return wrapper;
 }
+function transferAllowed(call,data = latestData) {
+  const extension = clients.find(c => c.id === $('client').value)?.extension;
+  return Boolean(extension && data && !data.stale && data.ami_connected && call?.state === 'connected' && Array.isArray(call.transfer_extensions) && call.transfer_extensions.includes(extension));
+}
+function transferButton(call,small = false) {
+  const button = el('button',small ? 'icon-button transfer-button' : 'secondary transfer-button',small ? '↪' : 'Gespräch vermitteln');
+  button.type = 'button'; button.dataset.action = 'transfer-open'; button.dataset.callId = call.id;
+  button.setAttribute('aria-label','Gespräch vermitteln'); button.title = 'Gespräch vermitteln';
+  return button;
+}
 function callCard(call,entry) {
   const card = el('div','call'); card.dataset.key = call.id;
   const top = el('div','call-top'); top.append(el('span','phone',call.number || 'Rufnummer unterdrückt'),el('span','duration',seconds(entry ? entry.wait_seconds : (call.state === 'connected' ? call.duration_seconds : call.channel_age_seconds))));
   const meta = el('div','call-meta'); meta.append(el('span','badge' + (entry ? ' wait' : ''),entry ? `Warteplatz ${entry.position}` : (call.state === 'connected' ? 'Im Gespräch' : 'Klingelt / Verbindungsaufbau')));
   if (call.extensions.length) meta.append(el('span',null,`Nebenstelle ${call.extensions.join(', ')}`));
+  if (!entry && transferAllowed(call)) meta.append(transferButton(call));
   card.append(top,meta,patientList(call.lookup_id,call.patients,call.name_status)); return card;
 }
 function compactRow(call,entry,key,own = false,queueName = '') {
@@ -128,12 +140,14 @@ function compactRow(call,entry,key,own = false,queueName = '') {
   const marker = el('span','row-mark',entry ? entry.position : '☎'); marker.title = entry ? `${queueName} · Warteplatz ${entry.position}` : own ? 'Eigene Verbindung' : 'Weitere Verbindung';
   const ambiguous = call.name_status === 'ambiguous' || call.patients.length > 1;
   const title = ambiguous ? `${call.number || 'Ohne Rufnummer'} · ${call.patients.length} Treffer` : call.patients.length === 1 ? patientName(call.patients[0]) : call.number || 'Rufnummer unterdrückt';
-  const name = el('button','compact-name' + (ambiguous ? ' ambiguous-name' : ''),title); name.type = 'button'; name.dataset.key = 'name'; name.title = title;
+  const name = el('button','compact-name' + (ambiguous ? ' ambiguous-name' : '')); name.type = 'button'; name.dataset.key = 'name'; name.title = title;
+  name.append(el('span','compact-name-text',title));
+  if (!ambiguous && call.patients.length === 1 && call.name_status === 'resolved' && call.patients[0].birth_date) name.append(el('span','compact-dob',birthDate(call.patients[0].birth_date)));
   if (!ambiguous && call.patients.length === 1 && call.name_status === 'resolved') patientAction(name,call.lookup_id,call.patients[0],0);
   else { name.dataset.action = 'detail'; name.dataset.detail = key; name.setAttribute('aria-expanded',String(expanded.has(key))); }
   const time = el('span','compact-time',clockDuration(entry ? entry.wait_seconds : call.state === 'connected' ? call.duration_seconds : call.channel_age_seconds)); time.title = entry ? 'Wartezeit' : call.state === 'connected' ? 'Gesprächsdauer' : 'Verbindungsaufbau';
-  const toggle = el('button','icon-button',expanded.has(key) ? '▴' : '▾'); toggle.type = 'button'; toggle.dataset.action = 'detail'; toggle.dataset.detail = key; toggle.dataset.key = 'toggle'; toggle.setAttribute('aria-expanded',String(expanded.has(key))); toggle.setAttribute('aria-label',`Details: ${title}`);
-  row.append(marker,name,time,toggle);
+  const toggle = el('button','icon-button detail-toggle',expanded.has(key) ? '▴' : '▾'); toggle.type = 'button'; toggle.dataset.action = 'detail'; toggle.dataset.detail = key; toggle.dataset.key = 'toggle'; toggle.setAttribute('aria-expanded',String(expanded.has(key))); toggle.setAttribute('aria-label',`Details: ${title}`);
+  row.append(marker,name,time); if (own && transferAllowed(call)) { row.classList.add('with-transfer'); row.append(transferButton(call,true)); } row.append(toggle);
   const detail = el('div','compact-detail'); detail.dataset.key = 'detail'; detail.hidden = !expanded.has(key);
   detail.append(el('p',null,`${call.number || 'Rufnummer unterdrückt'}${call.extensions.length ? ' · Nst. ' + call.extensions.join(', ') : ''}`));
   detail.append(el('p','muted',entry ? `${queueName} · Position ${entry.position} · ${seconds(entry.wait_seconds)}` : call.state === 'connected' ? `Im Gespräch · ${seconds(call.duration_seconds)}` : 'Klingelt / Verbindungsaufbau'));
@@ -141,8 +155,37 @@ function compactRow(call,entry,key,own = false,queueName = '') {
   if (call.number) { const callback = el('button','secondary','Rückruf'); callback.type = 'button'; callback.dataset.action = 'callback'; callback.dataset.number = call.number; detail.append(callback); }
   card.append(row,detail); return card;
 }
-function render(data, unreachable = false) {
+function syncTransfers(jobs) {
+  const serverJobs = Array.isArray(jobs) ? jobs : [], ids = new Set(serverJobs.map(job => job.request_id));
+  for (const job of serverJobs) knownTransfers.set(job.request_id,{job,seen:true});
+  for (const [id,value] of knownTransfers) if (value.seen && !ids.has(id)) knownTransfers.delete(id);
+}
+function transferJob(job,small = false,offline = false) {
+  const row = el('div','transfer-job'); row.dataset.key = job.request_id;
+  const target = job.target_type === 'internal' ? `Nebenstelle ${job.target}` : `Rufnummer ${job.target}`;
+  const mode = job.mode === 'attended' ? 'Rückfrage' : 'Direktvermittlung';
+  const summary = el('div','transfer-summary'); summary.append(el('strong',null,`${mode} · ${target}`),el('span','muted',job.message || transferLabels[job.phase] || `Status: ${job.phase || 'unbekannt'}`));
+  row.append(summary);
+  const actions = el('div','transfer-actions'), busy = transferActions.has(job.request_id);
+  if (job.can_cancel) {
+    const cancel = el('button','secondary','Zurück zum Anrufer'); cancel.type = 'button'; cancel.dataset.action = 'transfer-cancel'; cancel.dataset.requestId = job.request_id; cancel.disabled = offline || busy; actions.append(cancel);
+  }
+  if (job.can_complete) {
+    const complete = el('button','primary','Vermitteln abschließen'); complete.type = 'button'; complete.dataset.action = 'transfer-complete'; complete.dataset.requestId = job.request_id; complete.disabled = offline || busy; actions.append(complete);
+  }
+  if (actions.childElementCount) row.append(actions);
+  if (small) row.classList.add('compact-transfer-job');
+  return row;
+}
+function renderTransfers(stale) {
+  const clientId = $('client').value, jobs = Array.from(knownTransfers.values(),value => value.job).filter(job => job.client_id === clientId).sort((a,b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+  $('transfer-panel').hidden = !jobs.length; $('compact-transfers').hidden = !jobs.length;
+  reconcile($('transfer-jobs'),jobs.map(job => transferJob(job,false,stale)));
+  reconcile($('compact-transfer-jobs'),jobs.map(job => transferJob(job,true,stale)));
+}
+function render(data, unreachable = false, syncJobs = true) {
   latestData = data;
+  if (syncJobs && !unreachable) syncTransfers(data.transfers);
   const stale = data.stale || !data.ami_connected, calls = stale ? [] : data.calls;
   const status = unreachable ? 'Middleware nicht erreichbar' : stale ? 'Telefonie nicht aktuell' : demo ? 'Demo aktiv' : 'Telefonie verbunden';
   $('connection').textContent = status; $('connection').className = 'connection ' + (stale ? 'bad' : 'ok');
@@ -189,17 +232,82 @@ function render(data, unreachable = false) {
     const small = el('div','compact-extension'); small.dataset.key = ext.id; small.append(el('strong',null,`${ext.id} · ${ext.label}`),el('span',null,status)); compactExtensions.push(small);
   }
   reconcile($('extensions'),extNodes); reconcile($('compact-extensions'),compactExtensions);
+  renderTransfers(stale); updateTransferDialogState();
   $('updated').textContent = stale ? 'Nicht aktuell' : new Date(data.generated_at).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  $('outgoing-panel').hidden = !data.outgoing.length;
-  reconcile($('outgoing'),data.outgoing.slice().reverse().map(call => { const row = el('div','call'); row.dataset.key = call.request_id; row.append(el('span',null,`${call.extension} → ${call.number}`),el('span','muted',labels[call.phase] || call.phase)); return row; }));
+  const outgoing = data.outgoing || []; $('outgoing-panel').hidden = !outgoing.length;
+  reconcile($('outgoing'),outgoing.slice().reverse().map(call => { const row = el('div','call'); row.dataset.key = call.request_id; row.append(el('span',null,`${call.extension} → ${call.number}`),el('span','muted',labels[call.phase] || call.phase)); return row; }));
   const presentKeys = new Set([...own.map(c => `own-${c.id}`),...others.map(c => `all-${c.id}`),...compactWaiting.map(n => n.dataset.key)]);
   for (const key of expanded) if (!presentKeys.has(key)) expanded.delete(key);
+}
+function showTransferError(message = '',source = '') {
+  $('transfer-error').textContent = message; $('transfer-error').hidden = !message; $('transfer-error').dataset.source = source;
+}
+function boundTransferCall() {
+  return pendingTransfer && latestData?.calls?.find(call => call.id === pendingTransfer.callId);
+}
+function updateTransferDialogState() {
+  if (!$('transfer-dialog').open || !pendingTransfer) return;
+  const sameClient = $('client').value === pendingTransfer.clientId, call = boundTransferCall();
+  let error = '';
+  if (!sameClient) error = 'Der Arbeitsplatz wurde gewechselt. Bitte schließen und das Gespräch am richtigen Arbeitsplatz erneut auswählen.';
+  else if (!call || !transferAllowed(call)) error = latestData?.stale || !latestData?.ami_connected ? 'Telefoniedaten sind nicht aktuell. Vermitteln ist derzeit gesperrt.' : 'Das gebundene Gespräch ist nicht mehr verbunden oder nicht mehr vermittelbar.';
+  for (const button of $('transfer-form').querySelectorAll('[data-action="transfer-start"]')) button.disabled = transferStartBusy || Boolean(error);
+  if (error) showTransferError(error,'validity');
+  else if ($('transfer-error').dataset.source === 'validity') showTransferError();
+}
+function updateTransferTarget() {
+  const type = $('transfer-form').elements.target_type.value;
+  $('transfer-internal-label').hidden = type !== 'internal'; $('transfer-external-label').hidden = type !== 'external';
+  $('transfer-extension').required = type === 'internal'; $('transfer-number').required = type === 'external';
+}
+function openTransfer(callId) {
+  const call = latestData?.calls?.find(item => item.id === callId);
+  if (!call || !transferAllowed(call)) { toast('Dieses Gespräch ist nicht mehr vermittelbar.',true); return; }
+  const client = clients.find(item => item.id === $('client').value);
+  pendingTransfer = {clientId:client.id,callId:call.id}; transferStartBusy = false;
+  $('transfer-call').textContent = `${call.patients?.length === 1 && call.name_status === 'resolved' ? patientName(call.patients[0]) + ' · ' : ''}${call.number || 'Rufnummer unterdrückt'}`;
+  $('transfer-extension').replaceChildren(el('option',null,'Nebenstelle auswählen'));
+  $('transfer-extension').firstElementChild.value = '';
+  for (const extension of latestData.extensions || []) if (extension.id !== client.extension) { const option = el('option',null,`${extension.id} · ${extension.label}`); option.value = extension.id; $('transfer-extension').append(option); }
+  $('transfer-form').elements.target_type.value = 'internal'; $('transfer-number').value = ''; showTransferError(); updateTransferTarget();
+  $('transfer-dialog').showModal(); updateTransferDialogState();
+}
+function upsertTransfer(job) {
+  knownTransfers.set(job.request_id,{job,seen:false});
+  if (latestData) render(latestData,false,false);
+}
+async function startTransfer(mode) {
+  if (transferStartBusy || !pendingTransfer) return;
+  const client = clients.find(item => item.id === $('client').value), call = boundTransferCall();
+  if (!client || client.id !== pendingTransfer.clientId || !call || !transferAllowed(call)) { updateTransferDialogState(); return; }
+  const targetType = $('transfer-form').elements.target_type.value;
+  const target = (targetType === 'internal' ? $('transfer-extension').value : $('transfer-number').value).trim();
+  if (!target) { showTransferError(targetType === 'internal' ? 'Bitte eine Nebenstelle auswählen.' : 'Bitte eine externe Rufnummer eingeben.','input'); return; }
+  transferStartBusy = true; showTransferError(); updateTransferDialogState();
+  const signature = JSON.stringify([client.id,call.id,targetType,target,mode]);
+  if (!transferRequestIds.has(signature)) transferRequestIds.set(signature,uuid());
+  const request = {client_id:client.id,call_id:call.id,target_type:targetType,target,mode,request_id:transferRequestIds.get(signature)};
+  try { const job = await api('/api/v1/transfers',request); transferRequestIds.delete(signature); upsertTransfer(job); $('transfer-dialog').close(); toast(job.message || transferLabels[job.phase] || 'Vermittlung angefordert.', ['failed','unknown'].includes(job.phase)); }
+  catch(e) { showTransferError(e.message,'request'); }
+  finally { transferStartBusy = false; updateTransferDialogState(); }
+}
+async function transferAction(requestId,action) {
+  if (transferActions.has(requestId)) return;
+  const value = knownTransfers.get(requestId), job = value?.job, client = clients.find(item => item.id === $('client').value);
+  const allowed = action === 'complete' ? job?.can_complete : job?.can_cancel;
+  if (!job || !client || job.client_id !== client.id || !allowed || latestData?.stale || !latestData?.ami_connected) return;
+  transferActions.add(requestId); renderTransfers(false);
+  const key = JSON.stringify([client.id,job.request_id,action]);
+  if (!transferControlIds.has(key)) transferControlIds.set(key,uuid());
+  try { const updated = await api(`/api/v1/transfers/${encodeURIComponent(job.request_id)}/${action}`,{client_id:client.id,request_id:transferControlIds.get(key)}); upsertTransfer(updated); toast(updated.message || transferLabels[updated.phase], ['failed','unknown'].includes(updated.phase)); }
+  catch(e) { toast(e.message,true); }
+  finally { transferActions.delete(requestId); renderTransfers(Boolean(latestData?.stale || !latestData?.ami_connected)); }
 }
 async function poll() {
   if (polling) return;
   polling = true; clearTimeout(pollTimer);
   try { render(await api('/api/v1/telephony')); }
-  catch { render({...latestData,ami_connected:false,stale:true,calls:[],queues:[],extensions:latestData?.extensions || [],outgoing:latestData?.outgoing || []},true); }
+  catch { render({...latestData,ami_connected:false,stale:true,calls:[],queues:[],extensions:latestData?.extensions || [],outgoing:latestData?.outgoing || [],transfers:latestData?.transfers || []},true); }
   finally { polling = false; pollTimer = setTimeout(poll,document.hidden ? 15000 : 2000); }
 }
 async function search(autoOpen = false) {
@@ -229,6 +337,9 @@ async function dial(immediate = false) {
   $('dial-dialog').returnValue = ''; $('dial-dialog').showModal();
 }
 $('dial-dialog').addEventListener('close',() => { const call = pendingDial; pendingDial = null; if ($('dial-dialog').returnValue === 'call' && call) sendDial(call); });
+$('transfer-dialog').addEventListener('close',() => { pendingTransfer = null; transferStartBusy = false; showTransferError(); });
+$('transfer-form').addEventListener('submit',e => e.preventDefault());
+$('transfer-form').addEventListener('change',e => { if (e.target.name === 'target_type') { updateTransferTarget(); showTransferError(); } });
 $('client').addEventListener('change',rememberClient);
 $('setup-os').addEventListener('change',updateSetup);
 $('search-form').addEventListener('submit',e => { e.preventDefault(); search(); });
@@ -251,6 +362,11 @@ document.addEventListener('click',e => {
     const result = latestSearch?.lookup_id === button.dataset.lookup ? latestSearch : latestData?.calls.find(c => c.lookup_id === button.dataset.lookup);
     const patient = result?.patients[Number(button.dataset.patientIndex)]; if (patient) openPatient(button.dataset.lookup,patient,button); else toast('Zuordnung nicht mehr aktuell. Bitte erneut suchen.',true);
   } else if (action === 'callback') { $('number').value = button.dataset.number; dial(); }
+  else if (action === 'transfer-open') openTransfer(button.dataset.callId);
+  else if (action === 'transfer-close') $('transfer-dialog').close();
+  else if (action === 'transfer-start') startTransfer(button.dataset.mode);
+  else if (action === 'transfer-complete') transferAction(button.dataset.requestId,'complete');
+  else if (action === 'transfer-cancel') transferAction(button.dataset.requestId,'cancel');
   else if (action === 'popup') { const url = new URL('/',location.origin); url.searchParams.set('view','compact'); if ($('client').value) url.searchParams.set('client_id',$('client').value); window.open(url,'kienzlefon-compact','popup=yes,width=320,height=240'); }
 });
 document.addEventListener('visibilitychange',() => { if (!document.hidden) poll(); });

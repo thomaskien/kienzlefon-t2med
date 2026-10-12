@@ -2,7 +2,7 @@
 
 Zentrale PHP-Middleware zwischen Asterisk und T2med: Anrufer erkennen, Warteschlangen und Gespräche im Browser anzeigen, Patientenakten über GDT öffnen und Rückrufe vom richtigen Arbeitsplatz starten.
 
-Aktuelle Version: **1.3** · [Änderungen](CHANGELOG.md). Die Version steht auch im
+Aktuelle Version: **1.3.1** · [Änderungen](CHANGELOG.md). Die Version steht auch im
 Webmenü, unter `/healthz` und in `php bin/server.php --version`.
 
 ## Funktionen
@@ -13,6 +13,7 @@ Webmenü, unter `/healthz` und in `php bin/server.php --version`.
 - Namensauflösung für die Telefonanzeige über temporäre Kanalvariablen. Die Ein-Sekunden-Frist und die Übernahme in `CALLERID(name)` bleiben im Asterisk-Dialplan.
 - Patientenklick oder Weblink mit Rufnummer erzeugt eine ID-only-GDT im zugeordneten Arbeitsplatzverzeichnis.
 - Click-to-Dial: zuerst klingelt die eigene Nebenstelle, nach dem Abheben wird die Zielnummer gewählt. Registrierbare `tel:`-/`callto:`-Clients für Windows, macOS und Linux.
+- Direkt oder mit Rückfrage intern/extern vermitteln; kleiner Pfeil am eigenen verbundenen Gespräch. Voraussetzung: [Ergänzung im Telefonprojekt](docs/TRANSFER_HANDOFF.md).
 - Linux-Installer mit systemd, geschützter Zugangskonfiguration und additiver Guestfreigabe `kienzlefon-GDT`.
 
 PHP 8.2+ mit ReactPHP, ohne Datenbank und ohne Webserver-/PHP-FPM-Pflicht. Unterstützte Server: Debian 12+, Ubuntu 24.04+, Raspberry Pi OS Bookworm+ mit systemd. AMI, APS und Middleware können auf unterschiedlichen Rechnern laufen. Die Weboberfläche benötigt keine Anmeldung und ist für das abgeschottete Praxisnetz konfiguriert.
@@ -43,7 +44,7 @@ kienzlefon-GDT/
   empfang-2/AUFRUFi.gdt
 ```
 
-In T2med wird die **Kalenderanbindung** für den jeweiligen Arbeitsplatz auf dessen Importdatei eingerichtet. Eine noch nicht abgeholte Datei wird nicht überschrieben. Die Webmeldung bestätigt die Dateiübergabe; die tatsächliche Anzeige der Akte erfolgt durch T2med.
+In T2med wird die **Kalenderanbindung** für den jeweiligen Arbeitsplatz auf dessen Importdatei eingerichtet. Eine noch nicht abgeholte Datei wird atomar durch den neuesten Aktenaufruf ersetzt; dieser erscheint ohne zusätzliche Fehlermeldung im selben Arbeitsplatzverzeichnis. Die Webmeldung bestätigt die Dateiübergabe; die tatsächliche Anzeige der Akte erfolgt durch T2med.
 
 ## Demo und Entwicklung
 

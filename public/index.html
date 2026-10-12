@@ -11,6 +11,7 @@
     <div id="compact-own" aria-label="Eigene Gespräche"></div>
     <div id="compact-conversations" aria-label="Weitere laufende Gespräche" hidden><div id="compact-all-calls"></div></div>
   </section>
+  <section id="compact-transfers" class="transfer-panel" aria-labelledby="compact-transfers-title" hidden><h2 id="compact-transfers-title" class="compact-section-title">Vermittlung</h2><div id="compact-transfer-jobs"></div></section>
   <section id="compact-queue" aria-labelledby="compact-queue-title">
     <h2 id="compact-queue-title" class="compact-section-title">Warteschlange</h2>
     <div id="compact-waiting" aria-label="Wartende Anrufe"><p class="compact-empty">Anrufe werden geladen …</p></div>
@@ -31,9 +32,18 @@
 </section>
 <section id="search-results" class="panel results" hidden aria-live="polite"><div class="section-head"><h2>Suchergebnis <span id="search-number"></span></h2><button id="close-search" class="text-button">Schließen</button></div><div id="patients"></div></section>
 <div class="full-only"><div class="metrics"><div><span class="metric-number" id="waiting-count">–</span><span>In der Warteschleife</span></div><div><span class="metric-number" id="active-count">–</span><span>Im Gespräch</span></div><div><span class="metric-number" id="extension-count">–</span><span>Nebenstellen</span></div></div>
+<section id="transfer-panel" class="panel transfer-panel" aria-labelledby="transfer-panel-title" hidden><div class="section-head"><h2 id="transfer-panel-title">Aktuelle Vermittlungen</h2></div><div id="transfer-jobs"></div></section>
 <div class="columns"><section class="panel"><div class="section-head"><h2>Warteschleifen</h2><span class="live-label">LIVE</span></div><div id="queues" class="queue-list"></div></section><section class="panel"><div class="section-head"><h2>Gespräche</h2><span id="updated" class="muted"></span></div><div id="calls"></div></section></div>
 <section class="extensions-panel"><div class="section-head"><h2>Nebenstellen</h2><span class="muted">Status der aktuellen Telefonie</span></div><div id="extensions" class="extensions"></div></section>
 <footer>kienzlefon × T2med <span id="footer-client">Arbeitsplatz noch nicht zugeordnet</span></footer></div>
 </main><div id="toast" class="toast" role="status" hidden></div>
 <dialog id="dial-dialog" aria-labelledby="dial-title"><form method="dialog"><p class="eyebrow">RÜCKRUF</p><h2 id="dial-title">Anruf starten?</h2><p id="dial-description"></p><div class="dialog-actions"><button value="cancel" class="secondary">Abbrechen</button><button value="call" class="primary">Jetzt anrufen</button></div></form></dialog>
+<dialog id="transfer-dialog" aria-labelledby="transfer-title"><form id="transfer-form">
+  <p class="eyebrow">GESPRÄCH VERMITTELN</p><h2 id="transfer-title">Ziel auswählen</h2><p id="transfer-call"></p>
+  <fieldset class="transfer-targets"><legend class="sr-only">Zielart</legend><label><input type="radio" name="target_type" value="internal" checked> Nebenstelle</label><label><input type="radio" name="target_type" value="external"> Externe Rufnummer</label></fieldset>
+  <label id="transfer-internal-label" class="transfer-field">Nebenstelle<select id="transfer-extension" required></select></label>
+  <label id="transfer-external-label" class="transfer-field" hidden>Externe Rufnummer<input id="transfer-number" type="tel" autocomplete="off" placeholder="Rufnummer"></label>
+  <p class="transfer-help">Direkt übergibt das Gespräch sofort. Bei Rückfrage sprechen Sie zuerst selbst mit dem Ziel.</p><p id="transfer-error" class="transfer-error" role="alert" hidden></p>
+  <div class="dialog-actions"><button type="button" data-action="transfer-close" class="secondary">Schließen</button><button type="button" data-action="transfer-start" data-mode="blind" class="secondary">Direkt vermitteln</button><button type="button" data-action="transfer-start" data-mode="attended" class="primary">Rückfrage starten</button></div>
+</form></dialog>
 </body></html>

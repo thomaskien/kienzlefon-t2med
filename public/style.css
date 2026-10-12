@@ -87,3 +87,12 @@ button:disabled{cursor:default}
 .compact-view button,.compact-view select,.compact-view input{min-height:44px}
 #compact-waiting{max-height:240px}
 }
+
+/* Call transfer controls and compact patient birth dates. */
+.call-meta{flex-wrap:wrap}.call-meta .transfer-button{padding:5px 8px;font-size:11px}
+.transfer-targets{display:flex;gap:14px;border:0;padding:0;margin:16px 0 12px}.transfer-targets label{display:flex;align-items:center;gap:6px;font-size:13px}.transfer-targets input{width:auto;min-height:0;padding:0;margin:0}.transfer-field{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--muted)}.transfer-field select,.transfer-field input{width:100%;color:#203733}.transfer-help{color:var(--muted);margin-bottom:0}.transfer-error{color:#934e3d;margin:8px 0 0}.transfer-panel{margin:0 0 22px}.transfer-job{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border-bottom:1px solid #edf0eb}.transfer-job:last-child{border-bottom:0}.transfer-summary{display:flex;flex-direction:column;gap:4px;min-width:0}.transfer-summary strong{font-size:13px}.transfer-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}.transfer-actions button{padding:7px 10px;font-size:11px}
+.compact-row.with-transfer{grid-template-columns:20px minmax(0,1fr) auto 24px 24px}.compact-name{display:flex;align-items:baseline;gap:5px;min-width:0;overflow:hidden;white-space:normal;text-overflow:clip}.compact-name-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.compact-dob{font-size:11px;flex:none;white-space:nowrap;font-weight:400;color:#52665d;font-variant-numeric:tabular-nums}.compact-row .transfer-button{grid-column:4;color:#215d50;font-size:15px}.compact-row .detail-toggle{grid-column:4}.compact-row.with-transfer .detail-toggle{grid-column:5}
+.compact-view .transfer-panel{margin:0;border-bottom:1px solid var(--line)}.compact-view .transfer-job{padding:7px 8px;gap:5px;align-items:stretch;flex-direction:column;background:#f8faf6}.compact-view .transfer-summary{gap:2px}.compact-view .transfer-summary strong{font-size:11px}.compact-view .transfer-summary .muted{font-size:10px}.compact-view .transfer-actions{justify-content:flex-start;gap:4px}.compact-view .transfer-actions button{padding:5px 7px;font-size:10px;min-height:27px}
+@media(max-width:720px){.transfer-job{align-items:stretch;flex-direction:column}.transfer-actions{justify-content:flex-start}}
+
+@media(pointer:coarse){.compact-row.with-transfer{grid-template-columns:20px minmax(0,1fr) auto 40px 40px}}

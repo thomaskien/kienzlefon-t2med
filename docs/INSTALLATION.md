@@ -46,7 +46,13 @@ sudo installer/install.sh --reconfigure
 
 Bei der Neukonfiguration werden APS-Passwort und AMI-Secret getrennt behandelt: „beibehalten“ übernimmt den vorhandenen Wert; nach „nein“ setzt eine leere Eingabe den Wert ausdrücklich leer. Vorhandene Arbeitsplätze werden mit Label, Nebenstelle und Verzeichnis angeboten und können geändert, entfernt oder ergänzt werden. Individuelle Netzwerk-, Queue-, Timeout- und GDT-Kennwerte bleiben erhalten. Ein Fehlschlag stellt bekannte vorherige App-, TOML-, Unit- und Samba-Dateien wieder her; nach einer fehlgeschlagenen Erst-Migration bleiben die alte JSON-Datei und ihre bisherige Unit nutzbar. Neu angelegte Paketinstallationen, der Dienstbenutzer und sichere leere GDT-Verzeichnisse werden nicht automatisch entfernt.
 
+## Vermitteln
+
+Die neue Bedienung benötigt zusätzlich die [Einrichtung im kienzlefon-Telefonprojekt](TRANSFER_HANDOFF.md). `telephony.transfer_context` erhält bei bestehenden Konfigurationen automatisch den Standard `kienzlefon-transfer`. Der Middleware-Installer ändert den Asterisk-Server nicht.
+
 ## Samba und GDT
+
+Ein neuer Aktenaufruf ersetzt eine noch nicht importierte `AUFRUFi.gdt` atomar im gewählten Clientverzeichnis. Es gilt der neueste Aufruf; daraus entsteht keine Warteschlange mehrerer GDT-Dateien.
 
 Auf einer frischen Maschine richtet der Installer einen Standalone-Guest-Server ein. Bei vorhandenem Samba akzeptiert er nur die bereits wirksamen Werte `server role = standalone server` und `map to guest = Bad User`. Er ergänzt dann ein separates Include `/etc/samba/kienzlefon-t2med.conf`; der bestehende Text der Hauptkonfiguration bleibt bis auf die eingefügte Include-Zeile erhalten; andere Freigaben, Benutzer und globale Einstellungen werden nicht ersetzt. Die neue Freigabe heißt `kienzlefon-GDT`, nutzt `force user = kienzlefon-t2med` und erlaubt Gästen Lesen, Schreiben und Löschen von `AUFRUFi.gdt`. `testparm` prüft die Kandidatenkonfiguration vor dem Reload. Ein bereits aktiver Samba-Dienst wird nur neu geladen, nicht neu gestartet.
 

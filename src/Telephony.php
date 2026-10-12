@@ -8,6 +8,7 @@ final class Telephony
     private array $waiting = [];
     private array $members = [];
     private array $queueNames = [];
+    private array $callMembers = [];
     private array $buffer = [];
     private bool $syncing = false;
     private bool $online = false;
@@ -95,6 +96,31 @@ final class Telephony
         } elseif ($type === 'QueueMemberRemoved') unset($this->members[$e['Queue'] ?? ''][$e['Interface'] ?? '']);
     }
     public function channelExists(string $id, string $channel): bool { return ($this->channels[$id]['Channel'] ?? '') === $channel; }
+    public function channel(string $id): ?array { return $this->stale ? null : ($this->channels[$id] ?? null); }
+    public function ready(): bool { return $this->online && !$this->stale; }
+    /** Resolve a displayed call to exactly one staff channel and one bridged party. */
+    public function transferPair(string $callId, string $extension): array
+    {
+        $view = $this->view();
+        $call = null;
+        foreach ($view['calls'] as $candidate) if ($candidate['id'] === $callId) $call = $candidate;
+        if (!$this->ready() || !$call || $call['state'] !== 'connected') throw new \RuntimeException('Dieses Gespräch ist nicht mehr verbunden.');
+        $sources = [];
+        foreach ($this->callMembers[$callId] ?? [] as $id) {
+            $c = $this->channels[$id] ?? [];
+            if (!str_starts_with($c['Channel'] ?? '', 'Local/') && $this->extension($c['Channel'] ?? '') === $extension && ($c['ChannelStateDesc'] ?? '') === 'Up') $sources[] = (string)$id;
+        }
+        if (count($sources) !== 1) throw new \RuntimeException('Gespräch gehört nicht eindeutig zur eigenen Nebenstelle.');
+        $source = $sources[0]; $peers = [];
+        foreach ($this->channels as $id => $c) if ((string)$id !== $source && !str_starts_with($c['Channel'] ?? '', 'Local/') && $this->bridged($source, (string)$id)) $peers[] = (string)$id;
+        if (count($peers) !== 1) throw new \RuntimeException('Vermitteln benötigt ein eindeutiges Gespräch mit zwei Teilnehmern.');
+        $bridge = $this->channels[$source]['BridgeId'] ?? ''; $adjacent = [];
+        foreach ($this->channels as $id => $c) if ((string)$id !== $source && $bridge !== '' && ($c['BridgeId'] ?? '') === $bridge) $adjacent[] = (string)$id;
+        if (count($adjacent) !== 1) throw new \RuntimeException('Gesprächsbrücke ist nicht eindeutig.');
+        // Native transfer events can identify the intervening Local channel.
+        return ['source_id'=>$source, 'source_channel'=>$this->channels[$source]['Channel'], 'peer_id'=>$peers[0], 'peer_channel'=>$this->channels[$peers[0]]['Channel'],
+            'transferee_id'=>$adjacent[0], 'transferee_channel'=>$this->channels[$adjacent[0]]['Channel']];
+    }
     public function bridged(string $one, string $two): bool
     {
         if (!isset($this->channels[$one], $this->channels[$two])) return false;
@@ -121,6 +147,7 @@ final class Telephony
     }
     public function view(): array
     {
+        $this->callMembers = [];
         $now = microtime(true);
         $result = ['generated_at'=>gmdate('c'), 'ami_connected'=>$this->online, 'stale'=>$this->stale, 'calls'=>[], 'queues'=>[], 'extensions'=>[]];
         if (!$this->stale) {
@@ -155,6 +182,7 @@ final class Telephony
                 $callId = (string)$linkedId;
                 if (isset($usedIds[$callId])) $callId .= ':' . $first['Uniqueid'];
                 $usedIds[$callId] = true;
+                $this->callMembers[$callId] = array_map('strval', array_keys($group));
                 $ext = []; $number = ''; $numberScore = -1; $active = false; $ringing = false; $direction = 'unknown'; $created = $now; $connected = null;
                 foreach ($group as $id => $c) {
                     $channel = $c['Channel'] ?? ''; $channelCall[$channel] = $callId;

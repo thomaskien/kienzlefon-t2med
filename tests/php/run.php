@@ -33,10 +33,20 @@ test('Eindeutiger APS-Treffer und keine Treffer', function () { eq(Aps::classify
 test('Interne Referenz wird nicht an Browser ausgegeben', function () { $r=Aps::classify([[patient(90001)]],['03055501111']);eq(isset(Aps::publicPatients($r['patients'])[0]['_ref']),false); });
 test('AMI kodiert wiederholte Variable-Header und sperrt CRLF', function () { $wire=Ami::encode(['Action'=>'Originate','Variable'=>['A=1','B=2']]);eq(substr_count($wire,'Variable:'),2);rejects(fn()=>Ami::encode(['Value'=>"x\r\nAction: Command"]));eq(Ami::parse("Asterisk Call Manager/1.0\r\nResponse: Success\r\nActionID: one")['ActionID'],'one'); });
 test('GDT-Byte-Längen und ID-only-Inhalt', function () { $r=Gdt::record(90001);$lines=explode("\r\n",rtrim($r,"\r\n"));foreach($lines as $line)eq((int)substr($line,0,3),strlen($line)+2);eq((int)substr($lines[1],7),strlen($r));eq(str_contains($r,"014300090001\r\n"),true);eq(count($lines),7); });
-test('GDT atomar, getrennte Arbeitsplätze, kein Überschreiben', function () {
+test('GDT atomar ersetzen und Arbeitsplätze trennen', function () {
  $root=sys_get_temp_dir().'/kf-test-'.bin2hex(random_bytes(5));mkdir($root);mkdir($root.'/one');mkdir($root.'/two');$c=config();$c['gdt']['root']=$root;$writer=new Gdt($c['gdt'],['one'=>['directory'=>'one'],'two'=>['directory'=>'two']]);
- try { $writer->write('one',90001);rejects(fn()=>$writer->write('one',90002));eq(file_get_contents($root.'/one/AUFRUFi.gdt'),Gdt::record(90001));$writer->write('two',90002);eq(file_get_contents($root.'/two/AUFRUFi.gdt'),Gdt::record(90002));rejects(fn()=>$writer->write('../x',90001)); }
+ try { eq($writer->write('one',90001)['status'],'sent');$writer->write('two',90003);eq($writer->write('one',90002)['status'],'sent');eq(file_get_contents($root.'/one/AUFRUFi.gdt'),Gdt::record(90002));eq(file_get_contents($root.'/two/AUFRUFi.gdt'),Gdt::record(90003));eq(fileperms($root.'/one/AUFRUFi.gdt')&0777,0660);eq(glob($root.'/one/.kienzlefon-*'),[]);rejects(fn()=>$writer->write('../x',90001)); }
  finally { foreach(['one','two'] as $f){@unlink($root.'/'.$f.'/AUFRUFi.gdt');rmdir($root.'/'.$f);}rmdir($root); }
+});
+test('GDT ersetzt Symlink ohne dessen Ziel zu verändern und räumt temporäre Dateien auf', function () {
+ $root=sys_get_temp_dir().'/kf-test-'.bin2hex(random_bytes(5));mkdir($root);mkdir($root.'/one');$external=$root.'/external.gdt';file_put_contents($external,'extern');$target=$root.'/one/AUFRUFi.gdt';symlink($external,$target);$c=config();$c['gdt']['root']=$root;$writer=new Gdt($c['gdt'],['one'=>['directory'=>'one']]);
+ try { eq($writer->write('one',90004)['status'],'sent');eq(is_link($target),false);eq(file_get_contents($target),Gdt::record(90004));eq(file_get_contents($external),'extern');eq(glob($root.'/one/.kienzlefon-*'),[]); }
+ finally { @unlink($target);@unlink($external);rmdir($root.'/one');rmdir($root); }
+});
+test('GDT-Publikationsfehler räumt temporäre Datei auf', function () {
+ $root=sys_get_temp_dir().'/kf-test-'.bin2hex(random_bytes(5));mkdir($root);mkdir($root.'/one');$target=$root.'/one/AUFRUFi.gdt';mkdir($target);$c=config();$c['gdt']['root']=$root;$writer=new Gdt($c['gdt'],['one'=>['directory'=>'one']]);
+ try { rejects(fn()=>$writer->write('one',90005));eq(glob($root.'/one/.kienzlefon-*'),[]); }
+ finally { rmdir($target);rmdir($root.'/one');rmdir($root); }
 });
 test('IPv4, IPv6 und gemappte IPv4-Netze', function () { eq(HttpApi::allowedAddress('192.168.4.5',['192.168.0.0/16']),true);eq(HttpApi::allowedAddress('8.8.8.8',['192.168.0.0/16']),false);eq(HttpApi::allowedAddress('::ffff:192.168.4.5',['192.168.0.0/16']),true);eq(HttpApi::allowedAddress('::1',['::1/128']),true); });
 test('Warteschlange referenziert denselben logischen Anruf', function () { $s=new Telephony(config()['telephony']);$s->beginSync();$s->finishSync([channel('a','PJSIP/trunk-0001','a'),channel('b','PJSIP/201-0002','a')],[['Event'=>'QueueEntry','Queue'=>'praxis','Channel'=>'PJSIP/trunk-0001','Position'=>'2','Wait'=>'45']]);$v=$s->view();eq(count($v['calls']),1);eq($v['queues'][0]['entries'][0]['call_id'],$v['calls'][0]['id']);eq($v['calls'][0]['state'],'waiting');eq($v['calls'][0]['duration_seconds'],null); });
@@ -65,4 +75,6 @@ test('HTTP Origin, CSRF, Host und GET-Seiteneffekt', function () { $runtime=new 
 test('APS-Nummernkollision mit führender Null verlangt Auswahl', fn()=>eq(Aps::classify([[patient(305551111)]],['0305551111'])['status'],'ambiguous'));
 test('Frühe Medienbrücke zählt nicht als verbunden', function () { $s=new Telephony(config()['telephony']); $s->beginSync();$a=channel('a','PJSIP/201-1','a','b');$b=channel('b','PJSIP/trunk-2','a','b');$b['ChannelStateDesc']='Ring';$s->finishSync([$a,$b],[]);eq($s->bridged('a','b'),false);eq($s->view()['calls'][0]['state'] === 'connected',false); });
 test('Beantworteter Local-Zwischenkanal allein bedeutet kein Patientengespräch', function () { $s=new Telephony(config()['telephony']);$s->beginSync();$s->finishSync([channel('a','PJSIP/201-1','a','b1'),channel('b','Local/out@route-01;1','a','b1'),channel('c','Local/out@route-01;2','a','b2'),channel('d','PJSIP/trunk-2','a')],[]);eq($s->view()['calls'][0]['state'] === 'connected',false); });
+require __DIR__ . '/transfers.php';
+\React\EventLoop\Loop::stop();
 echo "$passed bestanden, $failed fehlgeschlagen\n";exit($failed ? 1 : 0);

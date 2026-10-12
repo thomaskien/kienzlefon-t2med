@@ -20,10 +20,12 @@ Neuladen. Der Schalter heißt dann **Eigene Gespräche** und schaltet zurück au
 Verbindungen des eigenen Arbeitsplatzes. Nebenstellen haben einen getrennten
 Schalter. Bei Verbindungsverlust werden auch hier keine alten Gespräche angezeigt.
 
+Bei genau einem Patiententreffer steht das Geburtsdatum ungefettet direkt hinter dem Namen. Bei mehreren Treffern erscheinen die Geburtsdaten erst in der Kandidatenauswahl.
+
 Die installierte Version steht im Menü unter den Einstellungen.
 
 Bei eindeutigem Treffer öffnet ein Klick auf den Patientennamen dessen Akte. Der
-kleine Pfeil klappt Rufnummer, Geburtsdatum, Patientennummer, Adresse und Rückruf
+kleine Abwärtspfeil klappt Rufnummer, Geburtsdatum, Patientennummer, Adresse und Rückruf
 auf. Mehrfachtreffer zeigen zunächst Rufnummer und Trefferzahl. Erst die Auswahl
 eines konkreten Patienten erzeugt die GDT-Datei. Unterdrückte/unbekannte Rufnummern
 bleiben ohne erzwungene Zuordnung sichtbar.
@@ -38,6 +40,14 @@ nicht automatisch nach vorne geholt.
 Im Menü: Arbeitsplatzwechsel, Rufnummernsuche, Wählen, Rückrufaufträge und die
 Einrichtung der Desktop-Telefonie-App. Die Rückrufaufträge sind die vorhandene
 flüchtige Diensthistorie, keine dauerhafte Anrufliste.
+
+## Vermitteln
+
+Ein kleiner seitlicher Pfeil am eigenen verbundenen Gespräch öffnet die Vermittlung. Eine andere Nebenstelle auswählen oder eine externe Rufnummer eingeben, danach **Direkt vermitteln** oder **Rückfrage starten** wählen. Das Öffnen des Dialogs allein verändert das Gespräch nicht. Fremde Gespräche und wartende Anrufe erhalten keine Vermittlungsaktion.
+
+Bei einer Rückfrage zeigt die Oberfläche den Verlauf auch dann weiter, wenn sich die Gesprächszeilen ändern. **Abschließen** wird erst nach bestätigter Verbindung mit dem tatsächlichen Ziel freigegeben; **Zurück zum Anrufer** bricht die Rückfrage ab. Asterisk muss den jeweiligen Ausgang bestätigen. Bei unbekanntem Ergebnis am Telefon prüfen; es wird kein Auftrag automatisch wiederholt. Arbeitsplatzwechsel, beendete Gespräche und veraltete Telefoniedaten sperren einen offenen Startdialog.
+
+Voraussetzung ist die ergänzte [Telefonprojekt-Einrichtung](TRANSFER_HANDOFF.md). Die lokalen Simulationstests prüfen die Bedienung, ein echter Transfer mit dem angepassten Asterisk ist noch separat zu testen.
 
 ## Status im Fenstertitel
 
@@ -82,7 +92,7 @@ http://middleware.example:8765/patient-oeffnen?client_id=empfang-1&telefon=%2B49
 Bei einem eindeutigen Treffer erzeugt die Seite die GDT-Datei für den gewählten
 Arbeitsplatz. Bei mehreren Treffern ist eine Auswahl erforderlich; bei keinem
 Treffer wird nichts geschrieben. Erfolg bestätigt die GDT-Übergabe, nicht deren
-bereits abgeschlossenen Import durch T2med.
+bereits abgeschlossenen Import durch T2med. Eine noch vorhandene Importdatei wird atomar durch den neuesten Aufruf ersetzt.
 
 Aktionsparameter verschwinden vor der Verarbeitung aus der Browserhistorie.
 Neuladen/Zurück löst keine erneute Wahl oder GDT aus. Ein erneuter bewusster Klick
