@@ -17,6 +17,10 @@ bash installer/install.sh --dry-run
 
 Lokal geprüft für Version 1.3.3 am 12.10.2026: 46 PHP-Kerntests, 49 PHP-Installerprüfungen, 21 Python-Installerprüfungen, 28 Clienttests, 14 Integrationstests und 21 Browser-Szenarien. Ein zusätzlicher Linux-spezifischer Socket-Test wird auf macOS übersprungen. GitHub Actions wiederholt die Tests unter Linux mit PHP 8.2 und 8.4 sowie Chromium.
 
+Für 1.3.4 sind lokal alle 29 Clienttests erfolgreich, einschließlich eines echten macOS-Applet-Builds ohne vorhandene Bundle-ID und mit bereits vorhandenen Metadaten. Der Test prüft die URL-Schemas, den eingebetteten Helper und die gültige Signatur; eine nachträgliche Ressourcenänderung muss erkannt werden. Die Applets bleiben in temporären Verzeichnissen und werden weder gestartet noch registriert. GitHub Actions führt die Clienttests zusätzlich auf macOS aus; unter Linux wird der native Bundle-Test übersprungen.
+
+Am 12.10.2026 wurde 1.3.4 zusätzlich auf dem lokalen Mac installiert: Signaturprüfung und Arbeitsplatzzuordnung per Bootstrap-GET erfolgreich; LaunchServices bestätigt `de.kienzlefon.t2med` als Standardhandler für `tel` und `callto`. Die URI-Verarbeitung wurde ohne Browserstart und ohne Telefonat per Dry-run geprüft.
+
 Die Integrationstests starten simulierte AMI- und HTTPS-APS-Server ausschließlich auf Loopback sowie den echten PHP-Dienst mit temporärer Konfiguration. Es werden keine Praxisserver kontaktiert und keine echten Patientenakten geöffnet. Prüffälle:
 
 - APS-Basic-Auth mit leerem Passwort und `ignoreSichtbarkeit: false`.
@@ -54,7 +58,7 @@ Anschließend gemeinsam mit dem angepassten kienzlefon-Dialplan testen:
 5. Click-to-Dial: richtige Nebenstelle zuerst, erst nach Abheben Zielruf, korrekte Praxis-Absenderrufnummer. Besetzt, keine Antwort und Verbindungsabbruch ebenfalls prüfen.
 6. Internes/externes Vermitteln direkt und mit Rückfrage gemäß [Transfer-Abnahme](TRANSFER_HANDOFF.md#6-abnahme-auf-dem-telefonserver) prüfen. Warteschlangenwechsel, Local-Kanaloptimierung sowie AMI-Neuverbindung prüfen. Der periodische Snapshot korrigiert verpasste Ereignisse.
 7. Bestehende SMB-Freigaben weiter nutzen; Guest-Lese- und Löschzugriff auf die neue GDT-Datei von Windows, macOS und Linux prüfen. OS-seitige Einschränkungen für Gastzugriff werden vom Installer nicht global geändert.
-8. `tel:`/`callto:` unter den jeweiligen Betriebssystemen registrieren und prüfen. Windows-Registry, macOS-LaunchServices, Linux-systemd/APT/Samba und reale Telefonate wurden im lokalen Mac-Entwicklungslauf nicht verändert.
+8. `tel:`/`callto:` unter den jeweiligen Betriebssystemen registrieren und prüfen. Die macOS-Registrierung wurde mit 1.3.4 wie oben beschrieben lokal geprüft. Windows-Registry, Linux-systemd/APT/Samba und reale Telefonate wurden im lokalen Mac-Entwicklungslauf nicht verändert.
 
 GDT-, Click-to-Dial- und Vermittlungs-Wiederholungskennungen sind im Arbeitsspeicher und überleben keinen Neustart. Bei ungewissem Wahlauftrag das Telefon prüfen, bevor ein neuer Auftrag angelegt wird. Die Webmeldung „Aufruf an T2med übergeben“ ist keine Rückmeldung über die tatsächlich sichtbare Akte.
 

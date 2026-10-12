@@ -291,8 +291,8 @@ class MiddlewareIntegration(unittest.TestCase):
                 self.assertEqual(len(self.aps.requests), after_first)
 
     def test_02_version_is_available_without_patient_lookup(self):
-        self.assertEqual(self.request('/api/v1/bootstrap')[1]['version'], '1.3.3')
-        self.assertEqual(self.request('/healthz')[1]['version'], '1.3.3')
+        self.assertEqual(self.request('/api/v1/bootstrap')[1]['version'], '1.3.4')
+        self.assertEqual(self.request('/healthz')[1]['version'], '1.3.4')
 
     def test_03_http_controls_and_read_only_link(self):
         self.assertEqual(self.request('/api/v1/lookup', {'number': '03055501111'}, {'Origin': 'https://foreign.example'})[0], 403)

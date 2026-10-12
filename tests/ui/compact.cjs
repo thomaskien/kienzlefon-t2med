@@ -17,7 +17,7 @@ const fixture = () => ({generated_at:new Date().toISOString(),ami_connected:true
       const req = route.request(), url = new URL(req.url());
       if (url.pathname.startsWith('/api/')) {
         if (req.method() === 'POST') state.posts.push({path:url.pathname,body:req.postDataJSON()});
-        if (url.pathname === '/api/v1/bootstrap') return route.fulfill({json:{token:'demo-token',demo:true,version:'1.3.3',clients:state.clients}});
+        if (url.pathname === '/api/v1/bootstrap') return route.fulfill({json:{token:'demo-token',demo:true,version:'1.3.4',clients:state.clients}});
         if (url.pathname === '/api/v1/telephony') return state.offline ? route.abort() : route.fulfill({json:state.data});
         if (url.pathname === '/api/v1/lookup') return route.fulfill({json:state.lookup || {number:'0305550103',lookup_id:'search',status:'ambiguous',patients:fixture().calls[2].patients}});
         if (url.pathname === '/api/v1/patient-open') return route.fulfill({json:{message:'Demo: Akte geöffnet'}});

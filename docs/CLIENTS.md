@@ -39,6 +39,14 @@ clients/install-macos.sh --make-default \
 
 Der Installer erzeugt `~/Applications/Kienzlefon T2med.app`, registriert deren `tel`-/`callto`-URL-Schemas bei LaunchServices und speichert die Konfiguration in `~/Library/Application Support/KienzlefonT2med/client.json`. Ein Protokollklick öffnet ohne zusätzlichen Bestätigungsdialog direkt die Browser-Bestätigung; ein Doppelklick auf die App öffnet die Kompaktübersicht. Fehler erscheinen als macOS-Hinweis.
 
+Seit 1.3.4 wird eine von `osacompile` ausgelassene Bundle-ID angelegt. Nach dem Einfügen des Helpers und der URL-Schemas wird die App lokal neu signiert und die Signatur geprüft. Die Konfiguration wird erst nach erfolgreichem Aufbau und Registrierung der App gespeichert. Bei einem älteren Abbruch mit `CFBundleIdentifier ... Does Not Exist` das vollständige aktuelle Projekt herunterladen und den Installer erneut ausführen.
+
+Die URL im Befehl als reine Adresse einfügen, ohne Markdown-Linksyntax. Aus dem Terminal startet die App so (Anführungszeichen wegen der Leerzeichen):
+
+```sh
+open "$HOME/Applications/Kienzlefon T2med.app"
+```
+
 Mit `--make-default` fordert der Installer über LaunchServices die benutzerspezifische Standardzuordnung für beide Protokolle an. Eine eventuelle macOS-Nachfrage bestätigen. Ohne diese Option wird die App nur registriert; eine bestehende Standard-App bleibt ausgewählt. Zum späteren Wechsel denselben Installationsbefehl mit `--make-default` erneut ausführen. Der Dry-run setzt auch mit dieser Option keine Standardzuordnung.
 
 Technische Grundlage: Apples [LaunchServices-Zuordnung für URL-Schemas](https://developer.apple.com/documentation/coreservices/1447760-lssetdefaulthandlerforurlscheme).

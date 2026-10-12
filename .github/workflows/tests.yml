@@ -26,6 +26,16 @@ jobs:
       - run: bash -n installer/install.sh clients/install-linux.sh clients/install-macos.sh
       - run: bash installer/install.sh --dry-run
 
+  macos-client:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 -m unittest discover -s tests/clients -v
+      - run: sh -n clients/install-macos.sh clients/macos-bundle.sh
+
   browser:
     runs-on: ubuntu-latest
     steps:

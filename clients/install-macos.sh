@@ -98,21 +98,13 @@ if [ -e "$APP" ]; then
 fi
 STAGED_APP="$VALIDATION/Kienzlefon T2med.app"
 osacompile -o "$STAGED_APP" "$VALIDATION/main.applescript"
-mkdir -p -- "$STAGED_APP/Contents/Resources"
-install -m 0755 "$SCRIPT_DIR/kienzlefon_call.py" "$STAGED_APP/Contents/Resources/kienzlefon_call.py"
-"$PYTHON" "$STAGED_APP/Contents/Resources/kienzlefon_call.py" --write-config --config "$CONFIG_FILE" --url "$URL" --client-id "$CLIENT_ID" --extension "$EXTENSION"
-/usr/libexec/PlistBuddy -c 'Set :CFBundleIdentifier de.kienzlefon.t2med' "$STAGED_APP/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c 'Delete :CFBundleURLTypes' "$STAGED_APP/Contents/Info.plist" >/dev/null 2>&1 || true
-/usr/libexec/PlistBuddy -c 'Add :CFBundleURLTypes array' "$STAGED_APP/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c 'Add :CFBundleURLTypes:0 dict' "$STAGED_APP/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c 'Add :CFBundleURLTypes:0:CFBundleURLName string de.kienzlefon.t2med.call' "$STAGED_APP/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c 'Add :CFBundleURLTypes:0:CFBundleURLSchemes array' "$STAGED_APP/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c 'Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string tel' "$STAGED_APP/Contents/Info.plist"
-/usr/libexec/PlistBuddy -c 'Add :CFBundleURLTypes:0:CFBundleURLSchemes:1 string callto' "$STAGED_APP/Contents/Info.plist"
+. "$SCRIPT_DIR/macos-bundle.sh"
+prepare_macos_bundle "$STAGED_APP" "$SCRIPT_DIR/kienzlefon_call.py"
 if [ -e "$APP" ]; then mv -- "$APP" "$VALIDATION/previous.app"; PREVIOUS=1; fi
 REPLACED=1
 mv -- "$STAGED_APP" "$APP"
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP"
+"$PYTHON" "$APP/Contents/Resources/kienzlefon_call.py" --write-config --config "$CONFIG_FILE" --url "$URL" --client-id "$CLIENT_ID" --extension "$EXTENSION"
 COMMITTED=1
 if [ "$MAKE_DEFAULT" -eq 1 ]; then
     /usr/bin/osascript -l JavaScript <<'JXA'

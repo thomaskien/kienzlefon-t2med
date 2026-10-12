@@ -93,6 +93,7 @@ class ConfigTests(unittest.TestCase):
             ("https://example.test", "client", "20A"),
             ("https://example.test:99999", "client", "201"),
             ("https://example.test\n.evil", "client", "201"),
+            ("[http://10.0.83.120:8766](http://10.0.83.120:8766)", "mac", "202"),
         ]
         for values in bad:
             with self.subTest(values=values), self.assertRaises(kc.ClientError):

@@ -1,5 +1,10 @@
 # Änderungen
 
+## 1.3.4 – 12.10.2026
+
+- macOS-Installer erzeugt eine fehlende `CFBundleIdentifier` korrekt und signiert die fertige App einschließlich Protokollregistrierung und Python-Helper neu. Die Konfiguration wird erst nach erfolgreichem App-Aufbau und LaunchServices-Registrierung gespeichert.
+- Native macOS-Bundleprüfung für Erstinstallation und vorhandene Metadaten, auch in GitHub Actions.
+
 ## 1.3.3 – 12.10.2026
 
 - Installer zeigt beim Start die Programmversion aus der zentralen Versionsdatei an, auch bei `--dry-run` und `--help`.
