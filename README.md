@@ -9,6 +9,8 @@ Anrufer erkennen, Gespräche und Warteschlangen überblicken, direkt wählen und
 [Installation](docs/INSTALLATION.md) · [FHIR und T2med-Aufruf](docs/FHIR.md) · [Bedienung und Weblinks](docs/WEB.md) · [Desktop-Clients](docs/CLIENTS.md) · [Asterisk](docs/AMI_DIALPLAN.md)
 
 > **Hinweis zum T2med-Demo-Key:** Der mitgelieferte API-Key erlaubt nur **100 Requests**. Ein FHIR-Abgleich kann mehrere Requests benötigen; die lokale Patientensuche benötigt keine weiteren. [FHIR einrichten](docs/FHIR.md)
+>
+> **Änderung gegenüber dem Video:** Die Software verwendet in der aktuellen Standardkonfiguration **kein APS mehr**, sondern FHIR. Die Anbindung erfolgt damit innerhalb der Spezifikationen von T2med.
 
 ## Oberfläche
 
