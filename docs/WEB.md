@@ -65,9 +65,11 @@ Die sichtbare, frisch geöffnete Seite sendet genau einen Auftrag. Ohne `sofort=
 Patientenakte anhand der Rufnummer öffnen:
 
 ```text
-http://middleware.example:8766/patient-oeffnen?client_id=empfang-1&telefon=%2B493055501111
+http://middleware.example:8766/patient-oeffnen?client_id=empfang-1&telefon=%2B493055501111&auto_close=1
 ```
 
 Bei einem eindeutigen Treffer mit echter Patientennummer erzeugt die Seite die GDT-Datei, bei mehreren erscheint die Auswahl, bei keinem wird nichts geschrieben. Erfolg bestätigt die Übergabe, nicht die bereits sichtbare Akte. Beide Linktypen akzeptieren `&view=compact` oder `&view=full`.
+
+Der optionale Parameter `&auto_close=1` am Aktenlink fordert die Seite auf, sich **nur nach einer erfolgreichen automatischen GDT-Übergabe** (Antwortstatus `sent`) selbst zu schließen. Manuelle Patientenauswahl, mehrere Treffer, fehlende Zuordnung, Demo-Betrieb und Fehler lassen das Fenster offen. Die Option wird bei der ersten Navigation aus der URL entfernt, sodass Neuladen oder Zurück keine erneute GDT-Ausgabe auslöst. Sie ist für Links gedacht, die aus einer Partneranwendung in einem neuen Tab geöffnet werden (beispielsweise kienzlefon-app); Browser können `window.close()` jedoch einschränken. Ohne den Parameter ändert sich das bisherige Verhalten nicht.
 
 Für `tel:`-/`callto:`-Links ohne Browserfenster dienen die [Desktop-Clients](CLIENTS.md). Zugangsdaten gehören nie in Weblinks.

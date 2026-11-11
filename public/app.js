@@ -89,13 +89,18 @@ function updateSetup() {
     : `sh clients/install-${os}.sh${os === 'macos' ? ' --make-default' : ''} --url ${shQuote(url)} --client-id ${shQuote(c.id)} --extension ${shQuote(c.extension)}`;
   $('setup-hint').textContent = os === 'windows' ? 'Danach in den Windows-Standard-Apps „Kienzlefon T2med“ für TEL und CALLTO wählen.' : os === 'macos' ? 'Ohne sudo ausführen. Die App wird unter „Programme“ im Benutzerordner registriert. Die Standard-App-Auswahl ist in der Anleitung beschrieben.' : 'Als angemeldeter Desktopbenutzer ohne sudo ausführen. Bei Nachfrage Kienzlefon T2med für tel/callto auswählen.';
 }
-async function openPatient(lookupId, patient, button) {
+async function openPatient(lookupId, patient, button, closeOnSuccess = false) {
   let client; try { client = selectedClient(); } catch(e) { showTools(); toast(e.message,true); $('client').focus(); return; }
   const key = `${client.id}:${lookupId}:${patient.patient_number}`;
   if (opening.has(key)) return;
   opening.add(key); if (button) button.disabled = true;
   if (!requestIds.has(key)) requestIds.set(key,uuid());
-  try { const result = await api('/api/v1/patient-open',{client_id:client.id,lookup_id:lookupId,patient_number:patient.patient_number,request_id:requestIds.get(key)}); toast(result.message); requestIds.delete(key); }
+  try {
+    const result = await api('/api/v1/patient-open',{client_id:client.id,lookup_id:lookupId,patient_number:patient.patient_number,request_id:requestIds.get(key)});
+    toast(result.message); requestIds.delete(key);
+    // Only explicit external requests may close the tab, and only after GDT was written.
+    if (closeOnSuccess && result.status === 'sent') window.close();
+  }
   catch(e) { toast(e.message,true); }
   finally { opening.delete(key); if (button) button.disabled = false; }
 }
@@ -409,7 +414,7 @@ async function poll() {
   catch { render({...latestData,ami_connected:false,stale:true,calls:[],queues:[],extensions:latestData?.extensions || [],outgoing:latestData?.outgoing || [],transfers:latestData?.transfers || []},true); }
   finally { polling = false; pollTimer = setTimeout(poll,document.hidden ? 15000 : 2000); }
 }
-async function search(mode, autoOpen = false) {
+async function search(mode, autoOpen = false, closeOnSuccess = false) {
   const submit = $('search-form').querySelector('[type=submit]'); submit.disabled = true;
   $('search-results').hidden = false; $('patients').replaceChildren(el('p','muted','Patienten werden gesucht …'));
   try {
@@ -423,7 +428,7 @@ async function search(mode, autoOpen = false) {
     if (mode === 'manual' && result.truncated) patients.prepend(el('p','notice warning','Es werden nur die ersten 200 Namenstreffer angezeigt. Bitte den Suchtext präzisieren.'));
     $('patients').replaceChildren(patients);
     $('search-results').scrollIntoView({block:'start'});
-    if (mode === 'phone' && autoOpen && result.status === 'resolved' && result.patients.length === 1 && Number.isInteger(result.patients[0].patient_number)) await openPatient(result.lookup_id,result.patients[0]);
+    if (mode === 'phone' && autoOpen && result.status === 'resolved' && result.patients.length === 1 && Number.isInteger(result.patients[0].patient_number)) await openPatient(result.lookup_id,result.patients[0],undefined,closeOnSuccess);
   } catch(e) { $('patients').replaceChildren(el('p','muted',e.message)); }
   finally { submit.disabled = false; }
 }
@@ -488,8 +493,9 @@ document.addEventListener('click',e => {
 document.addEventListener('visibilitychange',() => { if (!document.hidden) poll(); });
 async function boot() {
   const navigation = performance.getEntriesByType('navigation')[0], freshNavigation = navigation?.type === 'navigate';
+  const closeOnSuccessfulHandoff = location.pathname === '/patient-oeffnen' && query.get('auto_close') === '1';
   // Consume action parameters before any network wait. Refresh/back never repeats a call/GDT.
-  if (query.has('telefon')) { const url = new URL(location.href); for (const key of ['telefon','sofort','expected_extension']) url.searchParams.delete(key); history.replaceState(null,'',url); }
+  if (query.has('telefon') || query.has('auto_close')) { const url = new URL(location.href); for (const key of ['telefon','sofort','expected_extension','auto_close']) url.searchParams.delete(key); history.replaceState(null,'',url); }
   let savedView = '', savedClient = ''; try { savedView = localStorage.getItem('kienzlefon.view') || ''; savedClient = localStorage.getItem('kienzlefon.client') || ''; } catch {}
   setView(query.get('view') || savedView || 'compact',false);
   try { const open = sessionStorage.getItem('kienzlefon.allCalls') === 'true'; $('compact-conversations').hidden = !open; $('conversations-toggle').setAttribute('aria-expanded',String(open)); } catch {}
@@ -509,7 +515,7 @@ async function boot() {
       if (document.prerendering) await new Promise(resolve => document.addEventListener('prerenderingchange',resolve,{once:true}));
       if (document.hidden) await new Promise(resolve => { const visible = () => { if (!document.hidden) { document.removeEventListener('visibilitychange',visible); resolve(); } }; document.addEventListener('visibilitychange',visible); });
       if (location.pathname === '/waehlen') { if (freshNavigation) await dial(query.get('sofort') === '1'); }
-      else await search('phone',location.pathname === '/patient-oeffnen' && freshNavigation && $('client').value !== '');
+      else await search('phone',location.pathname === '/patient-oeffnen' && freshNavigation && $('client').value !== '',closeOnSuccessfulHandoff);
     }
   } catch(e) { toast(e.message,true); if (!token) { $('connection').textContent = 'Verbindung fehlgeschlagen'; $('compact-connection').className = 'status-dot bad'; $('compact-offline').hidden = false; $('compact-offline').textContent = e.message; document.title = 'Verbindung fehlgeschlagen · kienzlefon'; } }
 }

@@ -12,7 +12,7 @@ const fixture = () => ({generated_at:new Date().toISOString(),ami_connected:true
   const browser = await chromium.launch({headless:true, ...(process.env.UI_BROWSER_CHANNEL ? {channel:process.env.UI_BROWSER_CHANNEL} : {})}); let passed = 0;
   async function run(name,fn) {
     const context = await browser.newContext({viewport:{width:250,height:210},hasTouch:name.startsWith('Touch')}), page = await context.newPage();
-    const state = {data:fixture(),clients:[{id:'empfang-1',label:'Empfang',extension:'201'},{id:'zimmer-2',label:'Zimmer',extension:'202'}],posts:[],offline:false,lookup:null,patientSearch:null,errors:[],transferDelay:0,transferFailures:0,callbackDelay:0,retryFailures:0,dismissFailures:0,cleanupFailures:0,keepRemovedSnapshots:false};
+    const state = {data:fixture(),clients:[{id:'empfang-1',label:'Empfang',extension:'201'},{id:'zimmer-2',label:'Zimmer',extension:'202'}],posts:[],openResult:{status:'demo',message:'Demo: Akte geöffnet'},offline:false,lookup:null,patientSearch:null,errors:[],transferDelay:0,transferFailures:0,callbackDelay:0,retryFailures:0,dismissFailures:0,cleanupFailures:0,keepRemovedSnapshots:false};
     page.on('pageerror',e => state.errors.push(String(e)));
     await page.route('http://kienzlefon.test/**',async route => {
       const req = route.request(), url = new URL(req.url());
@@ -25,7 +25,7 @@ const fixture = () => ({generated_at:new Date().toISOString(),ami_connected:true
           return route.fulfill({json:result || {lookup_id:'manual-search',query:body.query.trim(),status:'ambiguous',patients:[patient(91001,'Berta','Becker'),patient(91002,'Bernd','Becker')],truncated:false}});
         }
         if (url.pathname === '/api/v1/lookup') return route.fulfill({json:state.lookup || {number:'0305550103',lookup_id:'search',status:'ambiguous',patients:fixture().calls[2].patients}});
-        if (url.pathname === '/api/v1/patient-open') return route.fulfill({json:{message:'Demo: Akte geöffnet'}});
+        if (url.pathname === '/api/v1/patient-open') return route.fulfill({json:state.openResult});
         if (url.pathname === '/api/v1/calls') { if (state.callbackDelay) await new Promise(resolve => setTimeout(resolve,state.callbackDelay)); return route.fulfill({status:202,json:{phase:'demo'}}); }
         const retryAction=url.pathname.match(/^\/api\/v1\/calls\/([^/]+)\/retry$/);
         if (retryAction) {
@@ -394,6 +394,36 @@ const fixture = () => ({generated_at:new Date().toISOString(),ami_connected:true
       assert.deepEqual(state.posts.filter(p=>p.path==='/api/v1/patients/search').at(-1).body,{query:'Becker'});
       assert.equal(state.posts.filter(p=>p.path==='/api/v1/lookup').length,2);
       assert.equal(state.posts.filter(p=>p.path==='/api/v1/patient-open').length,1);
+    });
+    await run('Patient tab auto-close: opt-in only, unique confirmed GDT, no reload replay',async ({page,state,go}) => {
+      // Intercept close() to verify the request without losing the test tab.
+      await page.addInitScript(() => { window.__closeRequests = 0; window.close = () => { window.__closeRequests++; }; });
+      state.lookup={number:'03012345',lookup_id:'auto-close-unique',status:'resolved',patients:[patient(90009,'Test','Person')]};
+      state.openResult={status:'sent',message:'Aufruf an T2med übergeben.'};
+      const link='/patient-oeffnen?client_id=empfang-1&telefon=03012345';
+      await go(link+'&auto_close=1');
+      await page.waitForFunction(() => window.__closeRequests === 1);
+      assert.equal(state.posts.filter(p=>p.path==='/api/v1/patient-open').length,1);
+      assert.equal(new URL(page.url()).searchParams.has('auto_close'),false);
+      const count=state.posts.length;
+      await page.reload(); await page.waitForFunction(() => document.querySelector('#compact-counts').textContent.includes('2 warten'));
+      assert.equal(state.posts.length,count); assert.equal(await page.evaluate(() => window.__closeRequests),0);
+
+      await go(link); await page.waitForFunction(() => !document.querySelector('#toast').hidden);
+      assert.equal(await page.evaluate(() => window.__closeRequests),0);
+      state.openResult={status:'demo',message:'Demo: Keine GDT-Datei geschrieben.'};
+      await go(link+'&auto_close=1'); await page.waitForFunction(() => !document.querySelector('#toast').hidden);
+      assert.equal(await page.evaluate(() => window.__closeRequests),0);
+
+      state.openResult={status:'sent',message:'Aufruf an T2med übergeben.'};
+      state.lookup={number:'03012345',lookup_id:'auto-close-ambiguous',status:'ambiguous',patients:[patient(90009,'Test','Person'),patient(90010,'Zweite','Person')]};
+      await go(link+'&auto_close=1'); await page.locator('#patients .patient').first().waitFor();
+      assert.equal(await page.evaluate(() => window.__closeRequests),0);
+      const before=state.posts.filter(p=>p.path==='/api/v1/patient-open').length;
+      await page.locator('#patients .patient').first().click();
+      await page.waitForFunction(() => !document.querySelector('#toast').hidden);
+      assert.equal(state.posts.filter(p=>p.path==='/api/v1/patient-open').length,before+1);
+      assert.equal(await page.evaluate(() => window.__closeRequests),0);
     });
     await run('Each confirmed patient click is a new GDT request, even when returning immediately',async ({page,state,go}) => {
       await go();
