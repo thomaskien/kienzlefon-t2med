@@ -1,0 +1,29 @@
+# Synthetic Kienzlefon v1 export, including the optional transfer and UFW data.
+schema_version = 1
+enabled = true
+allowed_source_ip = "*"
+ufw_rule = ["allow", "proto", "tcp", "from", "any", "to", "192.0.2.10", "port", "5039", "comment", "kienzlefon-middleware"]
+
+[ami]
+host = "192.0.2.10"
+port = 5039
+transport = "tls"
+username = "fon-test"
+secret = "Synthetic_Test_Fixture_Only_0123456789abcd"
+events = "on"
+
+[lookup]
+enabled = true
+budget_ms = 1000
+
+[click_to_dial]
+enabled = true
+context = "kienzlefon-click-to-dial"
+extensions = ["201", "299"]
+ring_timeout_ms = 20000
+
+[transfer]
+enabled = true
+context = "kienzlefon-transfer"
+extensions = ["201"]
+progress_schema_version = 1

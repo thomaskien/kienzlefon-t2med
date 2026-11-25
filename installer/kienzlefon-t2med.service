@@ -32,7 +32,7 @@ MemoryDenyWriteExecute=yes
 CapabilityBoundingSet=
 AmbientCapabilities=
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
-ReadWritePaths=@@GDT_ROOT@@ /run/kienzlefon-t2med
+ReadWritePaths=@@GDT_ROOT@@ /run/kienzlefon-t2med @@STATISTICS_DIR@@ @@CONTROL_DIR@@
 
 [Install]
 WantedBy=multi-user.target

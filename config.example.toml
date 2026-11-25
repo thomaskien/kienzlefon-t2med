@@ -19,7 +19,7 @@ ca_file = ""
 url = "https://t2med.example:16567"
 username = "aps-user"
 password = ""
-tls_verify = true
+tls_verify = false
 ca_file = ""
 timeout_seconds = 4
 cache_seconds = 120
@@ -27,6 +27,7 @@ cache_seconds = 120
 # Telefonie- und Originate-Einstellungen.
 [telephony]
 queues = []
+inactive_extensions = []
 country_code = "49"
 originate_context = "kienzlefon-click-to-dial"
 transfer_context = "kienzlefon-transfer"
@@ -44,7 +45,8 @@ filename = "AUFRUFi.gdt"
 sender = "AUFRUF"
 receiver = "T2MED_PX"
 
-# Je Arbeitsplatz folgt ein eigener Abschnitt clients.<id>.
+# Beispiel einer bestehenden individuellen Zuordnung. Der Installer verwendet für
+# neue Plätze dieselbe Nummer für ID, extension und directory (etwa "202").
 [clients.empfang-1]
 label = "Empfang 1"
 extension = "201"
@@ -58,7 +60,7 @@ provider = "fhir"
 base_url = "https://t2med.example:16567/aps/fhir/api/r4"
 binary = "/opt/kienzlefon-t2med/libexec/fhir-importer"
 database = "/var/lib/kienzlefon-t2med/patients.sqlite"
-tls_verify = true
+tls_verify = false
 ca_file = ""
 timeout_seconds = 30
 max_pages = 10000
@@ -66,3 +68,28 @@ max_patients = 200000
 # Explizite Ortsvorwahl für lokale Nummern; leer = keine Ergänzung.
 local_area_code = ""
 cache_seconds = 120
+
+# Erst nach Einrichtung der Statistik-Ereignisse im Asterisk-Dialplan aktivieren.
+[call_statistics]
+enabled = false
+database_path = "/var/lib/kienzlefon-t2med/call-statistics.sqlite"
+timezone = "Europe/Berlin"
+pbx_id = ""
+
+# Anlagen-Control-API (Vertrag 1.0.2); separat von AMI und Admininterface.
+[telephony_control]
+enabled = false
+base_url = "http://127.0.0.1:8767"
+token_file = "/etc/kienzlefon-t2med/control.token"
+routing_token_file = ""
+legacy_routing = false
+pbx_id = ""
+request_database = "/var/lib/kienzlefon-t2med/routing-requests.sqlite"
+
+# Nur serverseitiger App-Zugriff auf Overview und Rufgruppensteuerung.
+[app_access]
+enabled = false
+token_file = "/etc/kienzlefon-t2med/app.token"
+allowed_clients = []
+workplace_mode = "fon"
+allowed_networks = ["127.0.0.1/32", "::1/128"]

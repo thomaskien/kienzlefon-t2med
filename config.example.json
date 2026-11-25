@@ -27,13 +27,14 @@
     "url": "https://t2med.example:16567",
     "username": "aps-user",
     "password": "",
-    "tls_verify": true,
+    "tls_verify": false,
     "ca_file": "",
     "timeout_seconds": 4,
     "cache_seconds": 120
   },
   "telephony": {
     "queues": [],
+    "inactive_extensions": [],
     "extensions": {
       "201": "Empfang 1",
       "202": "Empfang 2"
@@ -63,12 +64,37 @@
     "base_url": "https://t2med.example:16567/aps/fhir/api/r4",
     "binary": "/opt/kienzlefon-t2med/libexec/fhir-importer",
     "database": "/var/lib/kienzlefon-t2med/patients.sqlite",
-    "tls_verify": true,
+    "tls_verify": false,
     "ca_file": "",
     "timeout_seconds": 30,
     "max_pages": 10000,
     "max_patients": 200000,
     "local_area_code": "",
     "cache_seconds": 120
+  },
+  "call_statistics": {
+    "enabled": false,
+    "database_path": "/var/lib/kienzlefon-t2med/call-statistics.sqlite",
+    "timezone": "Europe/Berlin",
+    "pbx_id": ""
+  },
+  "telephony_control": {
+    "enabled": false,
+    "base_url": "http://127.0.0.1:8767",
+    "token_file": "/etc/kienzlefon-t2med/control.token",
+    "routing_token_file": "",
+    "legacy_routing": false,
+    "pbx_id": "",
+    "request_database": "/var/lib/kienzlefon-t2med/routing-requests.sqlite"
+  },
+  "app_access": {
+    "enabled": false,
+    "token_file": "/etc/kienzlefon-t2med/app.token",
+    "allowed_clients": [],
+    "workplace_mode": "fon",
+    "allowed_networks": [
+      "127.0.0.1/32",
+      "::1/128"
+    ]
   }
 }

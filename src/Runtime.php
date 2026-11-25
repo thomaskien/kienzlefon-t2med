@@ -10,6 +10,9 @@ use function React\Promise\resolve;
 final class Runtime
 {
     private Telephony $state;
+    private CallStatistics $statistics;
+    private TelephonyControl $control;
+    private ?float $stateAt=null;
     private ?Ami $ami = null;
     private ?Aps $aps = null;
     private ?PatientDirectory $directory = null;
@@ -25,6 +28,8 @@ final class Runtime
     public function __construct(public readonly array $config, public readonly bool $demo = false)
     {
         $this->state = new Telephony($config['telephony']);
+        $this->statistics = new CallStatistics($config['call_statistics'] ?? [], $demo);
+        $this->control = new TelephonyControl($config, $demo);
         $this->gdt = new Gdt($config['gdt'], $config['clients']);
         if (!$demo) {
             $this->ami = new Ami($config['ami']);
@@ -38,20 +43,23 @@ final class Runtime
     }
     public function start(): void
     {
+        $this->control->start();
         Loop::addPeriodicTimer(60, function () { if ($this->ami) $this->synchronize(); $this->collect(); });
         if (!$this->ami) return;
-        $this->ami->on('connected', fn() => $this->synchronize());
+        $this->ami->on('connected', function () { $this->statistics->connected(); $this->synchronize(); });
+        $this->ami->on('heartbeat', function () { $this->statistics->checkpoint(); if ($this->state->ready()) $this->stateAt=microtime(true); });
         $this->ami->on('disconnected', function () {
+            $this->statistics->disconnected(); $this->stateAt=null;
             $this->syncing = false; $this->state->disconnect(); $this->jobs = [];
             $this->transfers->disconnect();
             foreach ($this->outgoing as &$call) if (!in_array($call['phase'], ['ended','failed'], true)) $call['phase'] = 'unknown';
             unset($call);
         });
-        $this->ami->on('event', function ($e) { $this->state->event($e); $this->onEvent($e); });
+        $this->ami->on('event', function ($e) { $this->state->event($e); $this->onEvent($e); if ($this->state->ready()) $this->stateAt=microtime(true); });
         $this->ami->start();
         Loop::addPeriodicTimer(1, fn() => $this->refreshLookups());
     }
-    public function stop(): void { $this->fhir?->stop(); $this->ami?->stop(); }
+    public function stop(): void { $this->control->stop(); $this->statistics->stop(); $this->fhir?->stop(); $this->ami?->stop(); }
     public function directoryStatus(): array { return $this->fhir?->status() ?? ['provider'=>$this->demo ? 'demo' : 'aps']; }
     public function importPatients(array $input): array
     {
@@ -63,7 +71,8 @@ final class Runtime
         if ($this->syncing || !$this->ami?->connected()) return;
         $this->syncing = true; $started = microtime(true); $this->state->beginSync();
         all([$this->ami->action('CoreShowChannels', [], 'CoreShowChannelsComplete'), $this->ami->action('QueueStatus', [], 'QueueStatusComplete')])->then(function ($snapshots) use ($started) {
-            $this->state->finishSync($snapshots[0], $snapshots[1]); $this->syncing = false; $this->reconcileOutgoing($started); $this->transfers->event([]); $this->refreshLookups();
+            $this->state->finishSync($snapshots[0], $snapshots[1]); $this->stateAt=microtime(true); $this->syncing = false; $this->reconcileOutgoing($started); $this->transfers->event([]); $this->refreshLookups();
+            $this->statistics->checkpoint();
         }, function () { $this->syncing = false; $this->ami?->disconnect(); });
     }
     private function refreshLookups(): void
@@ -196,6 +205,7 @@ final class Runtime
     }
     private function onEvent(array $e): void
     {
+        $this->statistics->event($e);
         $this->transfers->event($e);
         $event = $e['Event'] ?? '';
         if ($event === 'UserEvent' && ($e['UserEvent'] ?? '') === 'KienzlefonLookupRequest') $this->phoneName($e);
@@ -287,8 +297,22 @@ final class Runtime
         $view['outgoing'] = array_values(array_map($this->publicOutgoing(...), array_filter($this->outgoing, fn($call) => !($call['_hidden'] ?? false))));
         $view['transfers'] = $this->transfers->view();
         $view['patient_directory'] = $this->directoryStatus();
-        return $view;
+        $overview=$this->control->view($view['extensions'],$this->demo?microtime(true):$this->stateAt,$this->statistics->view());
+        // Preserve legacy extension fields (e.g. paused) on the full telephone endpoint.
+        $legacy=array_column($view['extensions'],null,'id');
+        foreach($overview['extensions'] as &$e) $e += $legacy[$e['id']]??[]; unset($e);
+        return array_replace($view,$overview);
     }
+    public function overview(bool $display = false): array
+    {
+        $local=$this->demo?$this->demoView():$this->state->view();
+        $overview = $this->control->view($local['extensions'],$this->demo?microtime(true):$this->stateAt,$this->statistics->view());
+        if ($display) $overview['ai_enabled'] = $this->control->aiEnabled();
+        return $overview;
+    }
+    public function routingWorkplaces(): PromiseInterface { return $this->control->workplaces(); }
+    public function routingSubmit(array $input,?array $clients=null,?string $pairedPbx=null): PromiseInterface { return $this->control->submit($input,$clients,$pairedPbx); }
+    public function routingGet(string $id,?array $clients=null,?string $pairedPbx=null): array { return $this->control->get($id,$clients,$pairedPbx); }
     public function transfer(array $input): PromiseInterface { return $this->transfers->start($input); }
     public function transferControl(string $id, string $action, array $input): PromiseInterface { return $this->transfers->control($id,$action,$input); }
     private static function outgoingFinished(array $call): bool { return in_array($call['phase'], ['ended','failed','demo'], true); }
@@ -409,7 +433,7 @@ final class Runtime
         foreach ([['demo-1','03055501011','waiting',[],74],['demo-2','03055501022','waiting',[],31],['demo-3','03055501033','connected',['201'],143]] as [$id,$number,$state,$extensions,$duration]) {
             $this->lookup($number)->then(static fn() => null);
             $key = Phone::key($number); $lookupId = $this->phoneLookups[$key]; $result = $this->lookups[$lookupId]['result'];
-            $calls[] = ['id'=>$id,'number'=>$number,'direction'=>'incoming','state'=>$state,'extensions'=>$extensions,'channel_age_seconds'=>$duration,'duration_seconds'=>$state === 'connected' ? $duration : null,'name_status'=>$result['status'],'name'=>$result['name'],'lookup_id'=>$lookupId,'patients'=>Patients::publicPatients($result['patients'])];
+            $calls[] = ['id'=>$id,'number'=>$number,'direction'=>'incoming','state'=>$state,'extensions'=>$extensions,'workplace_states'=>array_fill_keys($extensions,$state),'channel_age_seconds'=>$duration,'duration_seconds'=>$state === 'connected' ? $duration : null,'name_status'=>$result['status'],'name'=>$result['name'],'lookup_id'=>$lookupId,'patients'=>Patients::publicPatients($result['patients'])];
         }
         return ['generated_at'=>gmdate('c'),'ami_connected'=>true,'stale'=>false,'calls'=>$calls,'queues'=>[['name'=>'praxis','waiting_count'=>2,'entries'=>[['call_id'=>'demo-1','position'=>1,'wait_seconds'=>74],['call_id'=>'demo-2','position'=>2,'wait_seconds'=>31]]]],'extensions'=>[['id'=>'201','label'=>'Empfang 1','state'=>'busy','paused'=>false],['id'=>'202','label'=>'Empfang 2','state'=>'idle','paused'=>false]]];
     }

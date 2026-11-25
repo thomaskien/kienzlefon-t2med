@@ -28,3 +28,9 @@ WORKER_TASK.md
 
 # Optional browser-test dependency, never needed by the PHP service.
 node_modules/
+
+# Private local import helper and handoff artifacts.
+/bin/aps-seed.php
+/bin/aps-seed-anleitung.md
+/tests/integration/test_aps_seed.py
+/output/APS-*

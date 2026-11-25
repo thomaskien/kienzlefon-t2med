@@ -28,6 +28,7 @@ try {
         $config = Config::validate($config);
     } else $config = Config::load($options['config'] ?? Config::defaultPath());
     if (isset($options['listen']) && !$demo) { $config['http']['listen'] = $options['listen']; $config = Config::validate($config); }
+    if (!$demo) Config::checkServiceKeys($config);
     if (isset($options['check-config'])) { echo "Konfiguration gültig.\n"; exit(0); }
     $runtime = new Runtime($config, $demo);
     $server = new HttpServer(new StreamingRequestMiddleware(), new LimitConcurrentRequestsMiddleware(64), new RequestBodyBufferMiddleware(16384), new HttpApi($runtime));

@@ -59,8 +59,8 @@ final class Ami extends EventEmitter
                 $this->ready = true;
                 $this->backoff = 1;
                 $this->emit('connected');
-                $this->heartbeat = Loop::addPeriodicTimer(10, function () {
-                    $this->action('Ping')->then(null, fn() => $this->disconnect());
+                $this->heartbeat = Loop::addPeriodicTimer(3, function () {
+                    $this->action('Ping')->then(fn() => $this->emit('heartbeat'), fn() => $this->disconnect());
                 });
             }, fn() => $this->disconnect());
         }, function () use ($generation) { if ($generation === $this->generation) $this->disconnect(); });

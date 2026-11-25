@@ -31,7 +31,7 @@ async function api(path, data) {
     const options = {signal:controller.signal,cache:'no-store'};
     if (data !== undefined) Object.assign(options,{method:'POST',headers:{'Content-Type':'application/json','X-Kienzlefon-Token':token},body:JSON.stringify(data)});
     const response = await fetch(path,options), value = await response.json();
-    if (!response.ok) throw new Error(value.error || 'Anfrage fehlgeschlagen.');
+    if (!response.ok) { const error = new Error(value.error?.message || value.error || 'Anfrage fehlgeschlagen.'); error.status = response.status; error.code = value.error?.code; error.result = value; throw error; }
     return value;
   } catch(e) { if (e.name === 'AbortError') throw new Error('Keine rechtzeitige Antwort. Vor einem erneuten Versuch zuerst das Telefon prüfen.'); throw e; }
   finally { clearTimeout(timer); }
@@ -49,6 +49,7 @@ function reconcile(parent, children) {
       else {
         for (const attr of Array.from(current.attributes)) if (!fresh.hasAttribute(attr.name)) current.removeAttribute(attr.name);
         for (const attr of fresh.attributes) if (current.getAttribute(attr.name) !== attr.value) current.setAttribute(attr.name,attr.value);
+        if (fresh instanceof HTMLInputElement && fresh.type === 'checkbox') { current.checked = fresh.checked; current.indeterminate = fresh.indeterminate; }
         reconcile(current,Array.from(fresh.childNodes));
       }
     }
@@ -223,7 +224,7 @@ function render(data, unreachable = false, syncJobs = true) {
   $('compact-connection').className = 'status-dot ' + (stale ? 'bad' : 'ok'); $('compact-connection').setAttribute('aria-label',status); $('compact-connection').title = status;
   document.querySelector('.live-label').textContent = stale ? 'NICHT AKTUELL' : 'LIVE';
   $('offline').hidden = !stale; $('compact-offline').hidden = !stale; $('compact-offline').textContent = status;
-  const waitingCount = stale ? '–' : data.queues.reduce((n,q) => n + q.waiting_count,0), activeCount = stale ? '–' : calls.filter(c => c.state === 'connected').length;
+  const waitingCount = data.schema_version === 1 ? (controlFresh(data.live_counters) ? data.live_counters.waiting : '–') : stale ? '–' : data.queues.reduce((n,q) => n + q.waiting_count,0), activeCount = stale ? '–' : calls.filter(c => c.state === 'connected').length;
   $('waiting-count').textContent = waitingCount; $('active-count').textContent = activeCount; $('extension-count').textContent = data.extensions.length;
   $('compact-counts').textContent = `${waitingCount} warten · ${activeCount} ${activeCount === 1 ? 'Gespräch' : 'Gespräche'}`;
   document.title = `${demo ? 'DEMO · ' : ''}${stale ? status : `${waitingCount} warten · ${activeCount} ${activeCount === 1 ? 'Gespräch' : 'Gespräche'}`} · kienzlefon`;
@@ -260,12 +261,13 @@ function render(data, unreachable = false, syncJobs = true) {
   $('more-toggle').textContent = `Nst. (${data.extensions.length})`;
   const extNodes = [], compactExtensions = [];
   for (const ext of data.extensions) {
-    const state = stale ? 'unknown' : ext.state, status = (extensionLabels[state] || state) + (ext.paused ? ' · Pausiert' : '');
+    const state = extensionFresh(ext) && !stale ? ext.state : 'unknown', status = (extensionLabels[state] || state) + (ext.paused ? ' · Pausiert' : '');
     const node = el('button','extension ' + state); node.dataset.key = ext.id; extensionAction(node,ext,data);
-    const text = el('div'); text.append(el('strong',null,ext.label),el('small',null,status)); node.append(el('div','extension-number',ext.id),text); extNodes.push(node);
-    const small = el('button','compact-extension ' + state); small.dataset.key = ext.id; extensionAction(small,ext,data); small.append(el('strong',null,`${ext.id} · ${ext.label}`),el('span',null,status)); compactExtensions.push(small);
+    const text = el('div'); text.append(el('strong',null,ext.label),el('small',null,status)); node.append(el('div','extension-number',ext.id),text); extNodes.push(routingCard(node,ext,false));
+    const small = el('button','compact-extension ' + state); small.dataset.key = ext.id; extensionAction(small,ext,data); small.append(el('strong',null,`${ext.id} · ${ext.label}`),el('span',null,status)); compactExtensions.push(routingCard(small,ext,true));
   }
   reconcile($('extensions'),extNodes); reconcile($('compact-extensions'),compactExtensions);
+  renderControlCounters();
   renderTransfers(stale); updateTransferDialogState();
   $('updated').textContent = stale ? 'Nicht aktuell' : new Date(data.generated_at).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   renderOutgoing();
@@ -407,11 +409,106 @@ async function cleanupOutgoing() {
   catch(e) { toast(e.message,true); }
   finally { outgoingActions.delete(key); renderOutgoing(); }
 }
+// Rufgruppen: display only confirmed state; writes have a durable, unique request ID.
+let controlReceived = 0, controlTransport = 0, controlOffline = true, routingPolling = false;
+const routingPending = new Map();
+try { for (const job of JSON.parse(sessionStorage.getItem('kienzlefon.routingPending') || '[]')) {
+  if (/^[a-f0-9-]{36}$/.test(job.request_id) && ['normal','specialist'].includes(job.route) && /^\d{1,12}$/.test(job.extension)) routingPending.set(job.request_id,job);
+} } catch {}
+function saveRouting() { try { sessionStorage.setItem('kienzlefon.routingPending',JSON.stringify([...routingPending.values()])); } catch {} }
+function controlAge(age) { return typeof age === 'number' ? age + controlTransport + Math.max(0,performance.now() - controlReceived) : Infinity; }
+function controlFresh(part) { return !controlOffline && part && (part.status === 'current' || part.available === true) && controlAge(part.age_ms) < 10000; }
+function extensionFresh(ext) { return latestData?.schema_version !== 1 || (!controlOffline && controlAge(ext.state_age_ms) < 10000); }
+const routingReasons = {last_member:'Der letzte Teilnehmer bleibt eingeschaltet.',admin_locked:'Administrativ gesperrt.',not_eligible:'Für diese Nebenstelle nicht freigegeben.',global_disabled:'Fernbedienung administrativ gesperrt.',route_unavailable:'Rufgruppe nicht verfügbar.',not_supported:'Steuerung noch nicht eingerichtet.',state_unknown:'Kein aktueller bestätigter Zustand.'};
+function routingReason(ext,route) {
+  if (!clients.some(c => c.id === $('client').value)) return 'Zuerst einen Arbeitsplatz wählen.';
+  if ([...routingPending.values()].some(j => j.extension === ext.id && j.route === route)) return 'Auftrag offen · Ergebnis wird geprüft.';
+  if (!controlFresh(latestData?.routing_control) || typeof ext.routing?.[route] !== 'boolean') return 'Kein aktueller bestätigter Zustand.';
+  const direction = ext.routing[route] ? 'disable' : 'enable', permission = ext.routing.permissions?.[route];
+  return permission?.['can_' + direction] === true ? '' : (routingReasons[permission?.[direction + '_reason']] || 'Administrativ nicht freigegeben.');
+}
+function routingCard(button,ext,small) {
+  const card = el('div',small ? 'routing-card compact-routing-card' : 'routing-card'); card.dataset.key = ext.id;
+  card.append(button);
+  const row = el('div','routing-options');
+  for (const [route,name] of [['normal','Normal'],['specialist','ROT']]) {
+    const label = el('label'), input = el('input'), reason = routingReason(ext,route);
+    input.type = 'checkbox'; input.dataset.routingExtension = ext.id; input.dataset.routingRoute = route;
+    const known = controlFresh(latestData?.routing_control) && typeof ext.routing?.[route] === 'boolean';
+    input.checked = known && ext.routing[route]; input.indeterminate = !known; input.disabled = Boolean(reason);
+    input.setAttribute('aria-label',`${name} · Nebenstelle ${ext.id}`); label.title = reason || `${name} ${input.checked ? 'ausschalten' : 'einschalten'}`;
+    label.append(input,el('span',null,name)); row.append(label);
+  }
+  const pending = [...routingPending.values()].some(j => j.extension === ext.id);
+  if (pending) { const note = el('span','routing-pending','Abgleich …'); note.setAttribute('role','status'); row.append(note); }
+  card.append(row); return card;
+}
+function renderControlCounters() {
+  const l = latestData?.live_counters, today = latestData?.call_statistics?.today;
+  for (const prefix of ['full','compact']) {
+    const live = controlFresh(l);
+    for (const [key,label] of [['waiting','Warten'],['ivr','IVR'],['ai','AI']]) {
+      const n = $(prefix + '-live-' + key); n.textContent = `${label}: ${live ? l[key] : '—'}`;
+      n.title = live ? 'Aktuelle externe Eingänge' : 'Aktuelle Erfassung nicht verfügbar';
+    }
+    const n = $(prefix + '-today'), known = today && today.status !== 'unavailable' && Number.isInteger(today.incoming_calls);
+    n.textContent = `Anrufe heute: ${known ? (today.status === 'partial' ? '≈' : '') + today.incoming_calls : '—'}`;
+    n.title = known ? [...today.routes.map(r => `${r.label}: ${r.incoming_calls}`),`Ohne erfassten Weg: ${today.unclassified_calls}`,'Mehrere Wege pro Anruf möglich',...(today.status === 'partial' ? ['Ungefährer Wert; Erfassung nicht durchgehend'] : [])].join('\n') : 'Tagesstatistik nicht verfügbar';
+  }
+}
+function finishRouting(result) {
+  const job = result?.request;
+  if (!job || !routingPending.has(job.request_id)) return;
+  if (['applied','rejected','expired'].includes(job.state)) {
+    routingPending.delete(job.request_id); saveRouting();
+    toast(job.state === 'applied' ? (demo ? 'Demo: Rufgruppe geändert.' : 'Rufgruppe geändert.') : (job.error?.message || 'Änderung nicht angewendet.'),job.state !== 'applied');
+  }
+}
+async function pollRouting() {
+  if (routingPolling || !routingPending.size) return;
+  routingPolling = true;
+  try {
+    for (const job of [...routingPending.values()]) {
+      try { finishRouting(await api('/api/v1/extension-routing/requests/' + job.request_id)); }
+      catch (e) {
+        // Unknown IDs are queried until their original deadline; never re-send POST.
+        if (e.status === 404 && Date.parse(latestData?.generated_at) > Date.parse(job.expires_at)) {
+          routingPending.delete(job.request_id); saveRouting(); toast('Auftrag nicht angenommen; Frist abgelaufen.',true);
+        }
+      }
+    }
+  } finally { routingPolling = false; if (latestData) render(latestData,false,false); }
+}
+async function changeRouting(input) {
+  const ext = latestData?.extensions.find(e => e.id === input.dataset.routingExtension), route = input.dataset.routingRoute;
+  if (!ext) return;
+  const reason = routingReason(ext,route); input.checked = ext.routing?.[route] === true;
+  if (reason) { toast(reason,true); return; }
+  const r = latestData.routing_control, command = {request_id:uuid(),client_id:selectedClient().id,extension:ext.id,route,member:!ext.routing[route],expected_revision:r.revision,pbx_epoch:r.pbx_epoch,expires_at:new Date(Date.parse(latestData.generated_at) + 30000).toISOString()};
+  routingPending.set(command.request_id,command); saveRouting(); render(latestData,false,false);
+  try { finishRouting(await api('/api/v1/extension-routing',command)); }
+  catch (e) {
+    if (e.status && e.status < 500) { routingPending.delete(command.request_id); saveRouting(); }
+    toast(e.message,true);
+  }
+  await poll();
+}
+document.addEventListener('change',e => { if (e.target.matches('input[data-routing-extension]')) changeRouting(e.target); });
+setInterval(() => {
+  if (!latestData) return;
+  // Do not refresh the receipt time here: expiry must work during a network stall.
+  renderControlCounters();
+  for (const input of document.querySelectorAll('input[data-routing-extension]')) {
+    const ext = latestData.extensions.find(e => e.id === input.dataset.routingExtension);
+    if (ext && !controlFresh(latestData.routing_control)) { input.disabled = true; input.checked = false; input.indeterminate = true; }
+  }
+  if (latestData.schema_version === 1 && controlAge(0) >= 10000) render(latestData,false,false);
+},500);
 async function poll() {
   if (polling) return;
   polling = true; clearTimeout(pollTimer);
-  try { render(await api('/api/v1/telephony')); }
-  catch { render({...latestData,ami_connected:false,stale:true,calls:[],queues:[],extensions:latestData?.extensions || [],outgoing:latestData?.outgoing || [],transfers:latestData?.transfers || []},true); }
+  try { const start = performance.now(), data = await api('/api/v1/telephony'); controlReceived = performance.now(); controlTransport = controlReceived - start; controlOffline = false; render(data); pollRouting(); }
+  catch { controlOffline = true; render({...latestData,ami_connected:false,stale:true,calls:[],queues:[],extensions:latestData?.extensions || [],outgoing:latestData?.outgoing || [],transfers:latestData?.transfers || []},true); }
   finally { polling = false; pollTimer = setTimeout(poll,document.hidden ? 15000 : 2000); }
 }
 async function search(mode, autoOpen = false, closeOnSuccess = false) {
@@ -437,19 +534,19 @@ function validDialNumber(value) {
   if (number.length > 80 || /[^0-9+ ().\/-]/.test(number)) return '';
   return /^\+?[0-9]{3,20}$/.test(number.replace(/[ ().\/-]/g,'')) ? number : '';
 }
-async function sendDial(call) {
+async function sendDial(call, closeOnSuccess = false) {
   if (dialBusy) return; dialBusy = true; $('dial').disabled = true; if (latestData) render(latestData);
-  try { const result = await api('/api/v1/calls',call); toast(demo ? 'Demo: Kein Telefonat gestartet.' : (labels[result.phase] || 'Wählauftrag angenommen.')); await poll(); }
+  try { const result = await api('/api/v1/calls',call); toast(demo ? 'Demo: Kein Telefonat gestartet.' : (labels[result.phase] || 'Wählauftrag angenommen.')); if (closeOnSuccess && !['unknown','failed'].includes(result.phase)) window.close(); await poll(); }
   catch(e) { toast(e.message,true); }
   finally { dialBusy = false; $('dial').disabled = false; if (latestData) render(latestData); }
 }
-async function dial(immediate = false) {
+async function dial(immediate = false, closeOnSuccess = false) {
   if (dialBusy || $('dial-dialog').open) return;
   const number = validDialNumber($('number').value);
   if (!number) { showTools(); toast('Zum Anrufen bitte eine gültige Telefonnummer eingeben.',true); $('number').focus(); return; }
   let client; try { client = selectedClient(); } catch(e) { showTools(); toast(e.message,true); $('client').focus(); return; }
   const call = {client_id:client.id,extension:client.extension,number,request_id:uuid()};
-  if (immediate) { await sendDial(call); return; }
+  if (immediate) { await sendDial(call, closeOnSuccess); return; }
   pendingDial = call; $('dial-description').textContent = `Zuerst klingelt ${client.label} (${client.extension}). Nach dem Abheben wird ${number} gewählt.`;
   $('dial-dialog').returnValue = ''; $('dial-dialog').showModal();
 }
@@ -514,7 +611,7 @@ async function boot() {
       if (query.has('expected_extension') && clients.find(c => c.id === chosen)?.extension !== query.get('expected_extension')) throw new Error('Nebenstelle stimmt nicht mit der lokalen Registrierung überein. Telefonie-App neu konfigurieren.');
       if (document.prerendering) await new Promise(resolve => document.addEventListener('prerenderingchange',resolve,{once:true}));
       if (document.hidden) await new Promise(resolve => { const visible = () => { if (!document.hidden) { document.removeEventListener('visibilitychange',visible); resolve(); } }; document.addEventListener('visibilitychange',visible); });
-      if (location.pathname === '/waehlen') { if (freshNavigation) await dial(query.get('sofort') === '1'); }
+      if (location.pathname === '/waehlen') { if (freshNavigation) await dial(query.get('sofort') === '1', query.get('auto_close') === '1'); }
       else await search('phone',location.pathname === '/patient-oeffnen' && freshNavigation && $('client').value !== '',closeOnSuccessfulHandoff);
     }
   } catch(e) { toast(e.message,true); if (!token) { $('connection').textContent = 'Verbindung fehlgeschlagen'; $('compact-connection').className = 'status-dot bad'; $('compact-offline').hidden = false; $('compact-offline').textContent = e.message; document.title = 'Verbindung fehlgeschlagen · kienzlefon'; } }

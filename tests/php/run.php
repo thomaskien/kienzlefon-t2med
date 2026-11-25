@@ -89,5 +89,7 @@ test('Beantworteter Local-Zwischenkanal allein bedeutet kein Patientengespräch'
 require __DIR__ . '/transfers.php';
 require __DIR__ . '/outgoing.php';
 require __DIR__ . '/fhir.php';
+require __DIR__ . '/call_statistics.php';
+require __DIR__ . '/telephony_control.php';
 \React\EventLoop\Loop::stop();
 echo "$passed bestanden, $failed fehlgeschlagen\n";exit($failed ? 1 : 0);

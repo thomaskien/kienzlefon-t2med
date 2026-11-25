@@ -184,20 +184,25 @@ final class Telephony
                 $usedIds[$callId] = true;
                 $this->callMembers[$callId] = array_map('strval', array_keys($group));
                 $ext = []; $number = ''; $numberScore = -1; $active = false; $ringing = false; $direction = 'unknown'; $created = $now; $connected = null;
+                $workplaceStates = [];
                 foreach ($group as $id => $c) {
                     $channel = $c['Channel'] ?? ''; $channelCall[$channel] = $callId;
                     $extension = $this->extension($channel);
                     if ($extension !== '') $ext[$extension] = true;
                     $bridge = $c['BridgeId'] ?? '';
-                    if ($extension !== '' && !str_starts_with($channel, 'Local/') && $bridge !== '' && ($c['ChannelStateDesc'] ?? '') === 'Up') {
+                    $phone = $extension !== '' && !str_starts_with($channel, 'Local/');
+                    $legRinging = in_array($c['ChannelStateDesc'] ?? '', ['Ring','Ringing'], true);
+                    if ($phone && $legRinging) $workplaceStates[$extension] ??= 'ringing';
+                    if ($phone && $bridge !== '' && ($c['ChannelStateDesc'] ?? '') === 'Up') {
                         foreach ($group as $peerId => $peer) {
                             if ($peerId === $id || str_starts_with($peer['Channel'] ?? '', 'Local/') || !$this->bridged((string)$id, (string)$peerId)) continue;
                             $active = true;
+                            $workplaceStates[$extension] = 'connected';
                             $started = max($c['_connected'] ?? 0, $peer['_connected'] ?? 0);
                             if ($started > 0) $connected = $connected === null ? $started : min($connected, $started);
                         }
                     }
-                    $ringing = $ringing || in_array($c['ChannelStateDesc'] ?? '', ['Ring','Ringing'], true);
+                    $ringing = $ringing || $legRinging;
                     $created = min($created, $c['_created'] ?? $now);
                     foreach (['CallerIDNum','ConnectedLineNum'] as $field) {
                         $candidate = Phone::external((string)($c[$field] ?? ''), $this->config['extensions']);
@@ -208,7 +213,10 @@ final class Telephony
                     }
                     if ($id === $linkedId) $direction = $extension !== '' ? 'outgoing' : 'incoming';
                 }
-                $result['calls'][] = ['id'=>$callId,'direction'=>$direction,'state'=>$active ? 'connected' : ($ringing ? 'ringing' : 'dialing'), 'number'=>$number, 'extensions'=>array_map('strval', array_keys($ext)), 'channel_age_seconds'=>max(0, (int)($now - $created)), 'duration_seconds'=>$active && $connected !== null ? max(0, (int)($now - $connected)) : null, 'name_status'=>$number ? 'pending' : 'not_found', 'patients'=>[]];
+                $result['calls'][] = ['id'=>$callId, 'direction'=>$direction, 'state'=>$active ? 'connected' : ($ringing ? 'ringing' : 'dialing'),
+                    'number'=>$number, 'extensions'=>array_map('strval', array_keys($ext)), 'workplace_states'=>$workplaceStates,
+                    'channel_age_seconds'=>max(0, (int)($now - $created)), 'duration_seconds'=>$active && $connected !== null ? max(0, (int)($now - $connected)) : null,
+                    'name_status'=>$number ? 'pending' : 'not_found', 'patients'=>[]];
             }
             $queueNames = array_unique(array_merge($this->config['queues'], array_keys($this->queueNames), array_keys($this->waiting), array_keys($this->members)));
             foreach ($queueNames as $q) {

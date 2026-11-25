@@ -1,6 +1,6 @@
 # Architektur und Schnittstellen
 
-Ein PHP-CLI-Prozess unter systemd liefert Weboberfläche und API und hält AMI über ReactPHP offen. Standardquelle ist ein persistenter SQLite-Patientenbestand; die Go-Binary `libexec/fhir-importer` erneuert ihn nach einem T2med-Aufruf atomar. APS-Abfragen laufen nur im ausdrücklich konfigurierten Altbetrieb. Anrufzustand, Suchindex, Lookup-Cache und Auftrags-IDs liegen im Arbeitsspeicher.
+Ein PHP-CLI-Prozess unter systemd liefert Weboberfläche und API und hält AMI über ReactPHP offen. Standardquelle ist ein persistenter SQLite-Patientenbestand; die Go-Binary `libexec/fhir-importer` erneuert ihn nach einem T2med-Aufruf atomar. APS-Abfragen laufen nur im ausdrücklich konfigurierten Altbetrieb. Anrufzustand, Suchindex, Lookup-Cache und Wahl-/GDT-Aufträge liegen im Arbeitsspeicher. Rufgruppenaufträge liegen dauerhaft in einer eigenen SQLite-Datei.
 
 Start: `php bin/server.php --config=/etc/kienzlefon-t2med/config.toml`; Demo: `php bin/server.php --demo --listen=127.0.0.1:8765`. Schema: [config.example.toml](../config.example.toml). FHIR-Daten liegen unter `/var/lib/kienzlefon-t2med`, Konfiguration und Secrets unter `/etc/kienzlefon-t2med`, jeweils außerhalb des GDT-Shares.
 
@@ -12,7 +12,10 @@ Es gibt keinen Benutzerlogin und keine CORS-Freigabe. Browser-POSTs benötigen g
 | --- | --- |
 | `GET /api/v1/bootstrap` | Token, Clients `{id,label,extension}`, Demo, Version und Autor. |
 | `GET /healthz` | Dienststatus, Demo und Version. |
-| `GET /api/v1/telephony` | Zeitstempel, AMI-/Stale-Status, Gespräche, Queues, Nebenstellen, Wahl- und Vermittlungsaufträge. |
+| `GET /api/v1/telephony` | Zeitstempel, AMI-/Stale-Status, Gespräche, Queues, Nebenstellen, Wahl- und Vermittlungsaufträge sowie `call_statistics.today` mit Tageszahl und Wegen. |
+| `GET /api/v1/telephony/overview` | Übersicht nach Telefonievertrag 1.0.2 ohne Patienten oder Gespräche; auch im vollständigen Telefonie-GET enthalten. |
+| `POST /api/v1/extension-routing` | Administrativ erlaubte Änderung an Normal/ROT; dauerhafte UUID und bestätigte Revision. |
+| `GET /api/v1/extension-routing/requests/{id}` | Auftrag aus Journal, auch nach Middleware-Neustart. |
 | `POST /api/v1/lookup` | Reine Rufnummernsuche `{number}`; liefert Lookup-ID, Status und Patienten. |
 | `POST /api/v1/patients/search` | Lokale Suche `{query}` nach Name, exakter Patientennummer oder Telefon; maximal 200 Namenstreffer, Telefonkandidaten vollständig. |
 | `POST /api/v1/patient-open` | `{client_id,lookup_id,patient_number,request_id}`; validierten Kandidaten atomar als GDT schreiben. |
@@ -41,8 +44,28 @@ Konfigurierte interne Ziele nutzen `Originate` mit `Application: Dial` und `Data
 
 ## FHIR, APS und GDT
 
+Die optionale [Anruf- und Wegestatistik](ANRUFSTATISTIK.md) verarbeitet ausschließlich definierte Dialplan-UserEvents und speichert technische Eingangskennungen getrennt in `call-statistics.sqlite`. AMI-Snapshots und HTTP-GETs zählen nicht. Erfassungslücken bleiben als `partial` sichtbar; die Live-Telefonie kann gleichzeitig wieder aktuell sein.
+
 Der FHIR-Importer liest paginiert `GET /Patient`. Nur ein vollständiger validierter Lauf ersetzt die SQLite-Datei. Der Bearer-Token gelangt über stdin zum Kindprozess; der eingebettete Demo-API-Key erlaubt 100 Requests. Der TEMP-Suchindex normalisiert Namen und Rufnummern, ergänzt den Ortsnummern-Endvergleich und wird beim Dienststart aus Originalwerten aufgebaut.
 
 APS-Altbetrieb: `POST /aps/rest/praxis/patient/suche/find` mit Basic Auth und `{suchmaske, ignoreSichtbarkeit:false}`. Es werden keine weiteren APS-Stammdaten-Endpunkte vorausgesetzt.
 
 Pro Client veröffentlicht die Middleware `AUFRUFi.gdt` als ID-only-Satztyp 6301 mit CRLF und korrekten Byte-Längen. Eine temporäre Datei auf demselben Dateisystem wird atomar umbenannt und ersetzt die vorhandene Importdatei. Lokale Clients speichern nur Middleware-URL, Client-ID und Nebenstelle und registrieren `tel:` sowie `callto:`; APS-/AMI-Zugangsdaten bleiben auf dem Server.
+
+## Anlagensteuerung und App
+
+`TelephonyControl` pollt den geschützten Control-Dienst alle zwei Sekunden,
+prüft Identität und Schema und lässt Live-Zähler, Routing und unabhängigen
+AMI-Status getrennt ausfallen. Alterswerte enthalten Transport- und Wartezeit;
+ab zehn Sekunden sind die betroffenen Daten unbekannt. AMI-Pings alle drei
+Sekunden bestätigen die Verbindung für den separaten Nebenstellenstatus.
+
+`RoutingJournal` bestätigt die lokale Speicherung vor dem POST. Nach möglichem
+Versand werden offene UUIDs ausschließlich per GET abgefragt; terminale Ergebnisse
+bleiben mindestens sieben Tage, ungewisse Ergebnisse ohne automatische Löschung.
+Die Anlage prüft Freigaben, Revision und letzten Teilnehmer atomar beim Anwenden.
+
+`app_access` authentifiziert ausschließlich Overview und die beiden Routingrouten.
+Ein Bearer-Zugriff fällt niemals in Patienten-, Wahl-, Vermittlungs- oder
+GDT-Funktionen durch. Schlüsselrotation wird ohne Browser-Geheimnisse unterstützt.
+Konfiguration und Abnahme: [Telefonie-Steuerung](TELEFONIE-STEUERUNG.md).

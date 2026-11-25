@@ -99,7 +99,7 @@ final class PatientDirectory
         usort($patients, static fn($a,$b) => strcmp($a['last_name'],$b['last_name']) ?: strcmp($a['first_name'],$b['first_name']) ?: strcmp($a['id'],$b['id']));
         return self::result($patients) + ['truncated'=>$truncated];
     }
-    public function replace(array $patients): void
+    public function replace(array $patients, bool $withBirthDates = false): void
     {
         $path = $this->config['database']; $directory = dirname($path); $temp = null; $db = null;
         try {
@@ -113,7 +113,8 @@ final class PatientDirectory
             $db = new \PDO('sqlite:' . $temp, null, null, [\PDO::ATTR_ERRMODE=>\PDO::ERRMODE_EXCEPTION]);
             $db->exec('PRAGMA journal_mode=MEMORY; PRAGMA synchronous=FULL; CREATE TABLE patients (id TEXT PRIMARY KEY, patient_number INTEGER UNIQUE, first_name TEXT NOT NULL, last_name TEXT NOT NULL); CREATE TABLE phones (patient_id TEXT NOT NULL, original TEXT NOT NULL, search_key TEXT); CREATE INDEX phone_lookup ON phones(search_key); CREATE TABLE metadata(value TEXT NOT NULL)');
             $db->beginTransaction();
-            $insert = $db->prepare('INSERT INTO patients VALUES(?,?,?,?)');
+            if ($withBirthDates) $db->exec("ALTER TABLE patients ADD COLUMN birth_date TEXT NOT NULL DEFAULT ''");
+            $insert = $db->prepare($withBirthDates ? 'INSERT INTO patients VALUES(?,?,?,?,?)' : 'INSERT INTO patients VALUES(?,?,?,?)');
             $phone = $db->prepare('INSERT INTO phones VALUES(?,?,?)');
             $stats = ['patient_count'=>count($patients),'patients_with_phone'=>0,'phone_count'=>0,'unusable_phone_count'=>0,'invalid_patient_numbers'=>0];
             foreach ($patients as $p) {
@@ -122,7 +123,9 @@ final class PatientDirectory
                 else $stats['invalid_patient_numbers']++;
                 foreach (['first_name','last_name'] as $field) Config::text($p[$field] ?? null, 2048, true);
                 if (!is_array($p['phones'] ?? null) || !array_is_list($p['phones'])) throw new \RuntimeException();
-                $insert->execute([$p['id'],$p['patient_number'],$p['first_name'],$p['last_name']]);
+                $values = [$p['id'], $p['patient_number'], $p['first_name'], $p['last_name']];
+                if ($withBirthDates) $values[] = $p['birth_date'] ?? '';
+                $insert->execute($values);
                 $hasPhone = false;
                 foreach (array_unique($p['phones'], SORT_REGULAR) as $raw) {
                     Config::text($raw, 2048, true);

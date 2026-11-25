@@ -6,18 +6,20 @@ Nach Änderungen an Patientendaten oder Telefonnummern in T2med **Telefonverzeic
 
 ## Aufruf in T2med einrichten
 
+Die Browseradresse bezeichnet den **Middleware-Server**. In diesem Beispiel liegt die Middleware auf `10.0.83.85:8766` und der T2med-FHIR-Dienst auf `10.0.83.120:16567`. Der Installer schlägt die lokale Praxisadresse vor. Bei einer bisherigen Standardkonfiguration mit `localhost` und netzweit gebundenem Listener ergänzt die Einrichtung die eindeutige private Middleware-IP in `http.allowed_hosts`. Falls mehrere Schnittstellen vorhanden sind, bevorzugt sie das Netz des FHIR-Servers. Bei einer individuellen Konfiguration die für die Arbeitsplätze erreichbare Middleware-URL bei `--reconfigure` angeben.
+
 In T2med unter **Drittanbieter konfigurieren** einen Eintrag **Telefonverzeichnis aktualisieren** anlegen und eine der folgenden vollständigen URL-Zeilen eintragen.
 
 Query-Variante:
 
 ```text
-http://10.0.83.120:8766/telefonverzeichnis-aktualisieren.php?kontextId=${kontextId}&fhirBasisUrl=${fhirBasisUrl}&oAuthToken=${oAuthToken}
+http://10.0.83.85:8766/telefonverzeichnis-aktualisieren.php?kontextId=${kontextId}&fhirBasisUrl=${fhirBasisUrl}&oAuthToken=${oAuthToken}
 ```
 
 Fragment-Variante:
 
 ```text
-http://10.0.83.120:8766/telefonverzeichnis-aktualisieren.php#kontextId=${kontextId}&fhirBasisUrl=${fhirBasisUrl}&oAuthToken=${oAuthToken}
+http://10.0.83.85:8766/telefonverzeichnis-aktualisieren.php#kontextId=${kontextId}&fhirBasisUrl=${fhirBasisUrl}&oAuthToken=${oAuthToken}
 ```
 
 Beide Varianten funktionieren praktisch aus T2med. T2med ersetzt die drei Platzhalter und URL-kodiert ihre Werte. Die Zeilen enthalten normale `&`, keine Shell-Backslashes. Die Route ohne `.php` ist ebenfalls erreichbar; der PHP-Dienst liefert die Seite selbst aus.
@@ -42,7 +44,7 @@ Der Importer liest `GET /Patient`, folgt nur zulässigen Folgeseiten am konfigur
 
 ## Daten und Suche
 
-Gespeichert werden FHIR-ID, echte Patientennummer, Vor-/Nachname, originale und normalisierte Telefonwerte sowie Bestandsmetadaten; keine klinischen Daten, Geburtsdaten oder Adressen.
+Gespeichert werden FHIR-ID, echte Patientennummer, Vor- und Nachname, ein vollständig angegebenes Geburtsdatum, Telefonwerte und Bestandsmetadaten. Der nächste erfolgreiche Import ergänzt die Geburtsdaten im bisherigen Telefonverzeichnis.
 
 Die Patientennummer stammt ausschließlich aus `https://fhir.t2med.de/identifier/patientennummer`. Fehlt sie oder ist sie widersprüchlich, bleibt sie leer und der GDT-Aufruf ist gesperrt. Die FHIR-ID wird nie als Patientennummer verwendet.
 
@@ -53,6 +55,8 @@ Die manuelle Suche findet Teilnamen mit Umlautumschrift, Namen in beliebiger Rei
 Die Wahlhilfe übergibt bei eindeutiger Rufnummernzuordnung den echten Namen an Asterisk. Bei keinem oder mehreren Patienten bleibt diese Namensangabe leer; in der UI bleiben mehrere Patienten auswählbar. Die lokale Suche funktioniert ohne neuen Token und ohne FHIR-Request.
 
 ## Konfiguration und Abnahme
+
+Bei der Ersteinrichtung die IPv4- oder IPv6-Adresse des T2med-Servers eingeben. Aus `10.0.83.120` bildet der Installer `https://10.0.83.120:16567/aps/fhir/api/r4`. Bei einer Neukonfiguration behält Enter die vollständige gespeicherte Adresse bei, auch bei älteren Installationen mit DNS-Namen oder abweichendem Port oder Pfad. Die Prüfung des FHIR-Serverzertifikats ist bei der Ersteinrichtung standardmäßig ausgeschaltet. Für die Prüfung die System-CA oder eine eigene CA-Datei verwenden.
 
 Beispiele stehen in [config.example.toml](../config.example.toml) und `config.example.json`. Alte Konfigurationen leiten die FHIR-Basis aus der bisherigen APS-Adresse plus `/aps/fhir/api/r4` ab. Ein Update stellt die Standardquelle auf FHIR; bis zum ersten erfolgreichen Abgleich ist keine Patientensuche verfügbar. Alt-APS muss ausdrücklich gesetzt werden.
 

@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import tomllib
 import unittest
 import uuid
 import urllib.error
@@ -80,6 +81,15 @@ class FhirIntegration(unittest.TestCase):
         with socket.socket() as sock: sock.bind(('127.0.0.1',0)); port=sock.getsockname()[1]
         cls.url=f'http://127.0.0.1:{port}';cls.base=f'https://127.0.0.1:{cls.fhir.server_port}/aps/fhir/api/r4'
         config=json.loads((ROOT/'config.example.json').read_text());config['http'].update(listen=f'127.0.0.1:{port}',public_url=cls.url)
+        # Generate the same exact host grant as the Linux installer. The HTTP and TLS peers remain loopback.
+        candidate = cls.root/'lan.toml'
+        candidate.write_text((ROOT/'config.example.toml').read_text().replace('https://t2med.example:',
+                                                                              'https://10.0.83.120:'))
+        subprocess.run(['php', '-r',
+                        r"""require $argv[1]; Kienzlefon\Installer\prepareDirectoryHost($argv[2], [
+                            ['up'=>true, 'unicast'=>[['address'=>'10.0.83.85','netmask'=>'255.255.255.0']]]]);""",
+                        ROOT/'installer/configure.php', candidate], check=True, capture_output=True)
+        config['http']['allowed_hosts'] = tomllib.loads(candidate.read_text())['http']['allowed_hosts']
         cls.ami=AMIServer(); threading.Thread(target=cls.ami.serve_forever,daemon=True).start()
         config['telephony']['extensions']['21']='Kurzes Ziel'
         config['ami'].update(host='127.0.0.1',port=cls.ami.server_address[1],username='mock',secret='mock-secret');config['fhir'].update(base_url=cls.base,binary=str(binary),database=str(cls.root/'private'/'patients.sqlite'),tls_verify=False)
@@ -104,6 +114,28 @@ class FhirIntegration(unittest.TestCase):
     def request(cls,path,body=None):
         req=urllib.request.Request(cls.url+path,data=None if body is None else json.dumps(body).encode(),headers={} if body is None else {'Content-Type':'application/json','X-Kienzlefon-Token':cls.csrf})
         with urllib.request.urlopen(req,timeout=5) as response:return json.load(response)
+
+    def test_practice_address_refresh_from_browser(self):
+        authority = '10.0.83.85:' + str(urllib.parse.urlparse(self.url).port)
+        def browser(path, body=None, csrf=None):
+            headers = {'Host': authority}
+            if body is not None:
+                headers.update({'Origin': 'http://' + authority, 'Content-Type': 'application/json',
+                                'X-Kienzlefon-Token': csrf})
+            request = urllib.request.Request(self.url + path, headers=headers,
+                                             data=None if body is None else json.dumps(body).encode())
+            return urllib.request.urlopen(request, timeout=5)
+        with browser('/telefonverzeichnis-aktualisieren.php') as response:
+            self.assertEqual(response.status, 200)
+        with browser('/api/v1/bootstrap') as response:
+            csrf = json.load(response)['token']
+        payload = dict(kontextId='test-context', fhirBasisUrl=self.base, oAuthToken='synthetic-lan-import',
+                       request_id=str(uuid.uuid4()))
+        with browser('/api/v1/fhir/import', payload, csrf) as response:
+            self.assertEqual(response.status, 202)
+        status = self.finished()
+        self.assertEqual(status['job']['state'], 'success')
+        self.assertEqual(status['directory']['patient_count'], 5)
 
     def test_dial_names_and_internal_routing(self):
         self.launch('dial-names'); self.assertEqual(self.finished()['job']['state'],'success')

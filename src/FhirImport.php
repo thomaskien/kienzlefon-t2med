@@ -106,7 +106,7 @@ final class FhirImport
             // The pipe can still contain bytes produced just before child exit.
             if (!feof($this->pipes[1])) return;
             if ($this->exitCode !== 0 || $this->completed === null || trim($this->buffer) !== '') throw new \RuntimeException();
-            $this->directory->replace($this->completed['patients']);
+            $this->directory->replace($this->completed['patients'], withBirthDates: true);
             $this->job = array_replace($this->job, ['state'=>'success','finished_at'=>gmdate('c'),'pages'=>$this->completed['pages'],'patient_count'=>$this->completed['total'],'total'=>$this->completed['total'],'message'=>'Telefonverzeichnis erfolgreich aktualisiert.']);
             ($this->onComplete)(); $this->cleanup(); $this->saveStatus();
         } catch (\Throwable) { $this->fail('FHIR-Abgleich fehlgeschlagen. Bisheriger vollständiger Bestand bleibt erhalten.'); }

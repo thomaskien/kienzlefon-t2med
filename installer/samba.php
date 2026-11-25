@@ -75,7 +75,7 @@ function appendGlobalSetting(string $main, string $line): string
  * Pure preflight planner. $effective is canonical testparm output, if Samba exists.
  * @return array{main:string,managed:string,changed:bool,rollback:list<string>}
  */
-function plan(string $main, ?string $currentManaged, string $effective, string $root, string $includePath, string $observedMapToGuest, string $observedRole, bool $fresh): array
+function plan(string $main, ?string $currentManaged, string $effective, string $root, string $includePath, string $observedMapToGuest, string $observedRole, bool $fresh, string $reportedRole = ''): array
 {
     if (!preg_match('#^/[A-Za-z0-9._/-]+$#', $includePath) || str_contains($includePath, '..')) {
         throw new SambaConflict('Unsicherer Include-Pfad.');
@@ -105,7 +105,12 @@ function plan(string $main, ?string $currentManaged, string $effective, string $
         if (strcasecmp(trim($observedMapToGuest), 'Bad User') !== 0) {
             throw new SambaConflict("Bestehendes Samba nutzt map to guest={$observedMapToGuest}; erforderlich ist 'Bad User'. Nichts wurde geändert; --skip-samba verwenden und Share separat bereitstellen.");
         }
-        if (strcasecmp(trim($observedRole), 'standalone server') !== 0) {
+        if (strcasecmp(trim($observedRole), 'auto') === 0) {
+            if ($reportedRole !== 'ROLE_STANDALONE') {
+                $detail = $reportedRole === '' ? 'keine Rollenmeldung' : $reportedRole;
+                throw new SambaConflict("Bei 'server role = auto' muss testparm eindeutig ROLE_STANDALONE bestätigen (Ergebnis: {$detail}).");
+            }
+        } elseif (strcasecmp(trim($observedRole), 'standalone server') !== 0) {
             throw new SambaConflict("Bestehende Samba-Rolle '{$observedRole}' ist nicht 'standalone server'. Nichts wurde geändert; --skip-samba verwenden.");
         }
     }
@@ -124,7 +129,7 @@ function plan(string $main, ?string $currentManaged, string $effective, string $
 function main(array $argv): int
 {
     try {
-        $options = getopt('', ['main:', 'managed:', 'effective:', 'root:', 'include:', 'map:', 'role:', 'fresh', 'output:']);
+        $options = getopt('', ['main:', 'managed:', 'effective:', 'root:', 'include:', 'map:', 'role:', 'reported-role:', 'fresh', 'output:']);
         foreach (['main', 'effective', 'root', 'include', 'output'] as $required) {
             if (!isset($options[$required]) || !is_string($options[$required])) {
                 throw new SambaConflict("Option --{$required} fehlt.");
@@ -142,7 +147,9 @@ function main(array $argv): int
                 throw new SambaConflict('Samba-Include ist nicht lesbar.');
             }
         }
-        $result = plan($main, $currentManaged, $effective, $options['root'], $options['include'], (string)($options['map'] ?? ''), (string)($options['role'] ?? ''), isset($options['fresh']));
+        $result = plan($main, $currentManaged, $effective, $options['root'], $options['include'],
+            (string)($options['map'] ?? ''), (string)($options['role'] ?? ''), isset($options['fresh']),
+            (string)($options['reported-role'] ?? ''));
         if (!is_dir($options['output']) || !is_writable($options['output'])) {
             throw new SambaConflict('Plan-Ausgabeverzeichnis ist nicht beschreibbar.');
         }

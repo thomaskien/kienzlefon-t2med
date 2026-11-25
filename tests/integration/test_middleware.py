@@ -8,6 +8,7 @@ import shutil
 import shlex
 import socket
 import socketserver
+import sqlite3
 import ssl
 import subprocess
 import tempfile
@@ -147,6 +148,8 @@ class MiddlewareIntegration(unittest.TestCase):
         config['patients']['provider'] = 'aps'
         config['aps'].update(url=f'https://127.0.0.1:{cls.aps.server_port}', username='test', password='', tls_verify=False)
         config['gdt']['root'] = str(cls.share)
+        cls.statistics_db = root / 'call-statistics.sqlite'
+        config['call_statistics'].update(enabled=True, pbx_id='practice-test', database_path=str(cls.statistics_db))
         config['clients']['empfang-2'] = {'label': 'Empfang 2', 'extension': '202', 'directory': 'empfang-2'}
         cls.numeric_clients = {'201': '301', '0': '302', '001': '303', '1': '304'}
         for client_id, extension in cls.numeric_clients.items():
@@ -163,6 +166,7 @@ class MiddlewareIntegration(unittest.TestCase):
         launch = shlex.split(next(line.removeprefix('ExecStart=') for line in unit.splitlines() if line.startswith('ExecStart=')))
         launch[0] = shutil.which('php')
         launch = [arg.replace('/opt/kienzlefon-t2med', str(ROOT)).replace('/etc/kienzlefon-t2med/config.toml', str(path)) for arg in launch]
+        cls.launch = launch
         cls.process = subprocess.Popen(launch, cwd=ROOT, stdout=cls.log, stderr=cls.log)
         def ready():
             try:
@@ -204,6 +208,66 @@ class MiddlewareIntegration(unittest.TestCase):
         status, result = self.request('/api/v1/lookup', {'number': number})
         self.assertEqual(status, 200)
         return result
+
+    def test_00_call_statistics_routes_and_storage_failure(self):
+        event = dict(Event='UserEvent', UserEvent='KienzlefonCallEntered', SchemaVersion='1',
+                     PbxId='practice-test', CallId=str(uuid.uuid4()), EnteredAt=str(int(time.time())))
+        self.ami.send(event)
+        self.ami.send(event)
+        self.ami.send({**event, 'UserEvent': 'KienzlefonCallRoute', 'Route': 'ai'})
+        self.ami.send({**event, 'UserEvent': 'KienzlefonCallRoute', 'Route': 'queue'})
+        self.ami.send({**event, 'UserEvent': 'KienzlefonCallRoute', 'Route': 'queue'})
+        def captured():
+            today = self.request('/api/v1/telephony')[1]['call_statistics']['today']
+            counts = {r['id']: r['incoming_calls'] for r in today['routes'] or []}
+            return today if counts.get('queue') == 1 else None
+        today = wait_for(captured)
+        self.assertEqual(today['incoming_calls'], 1)
+        self.assertEqual(today['unclassified_calls'], 0)
+        self.assertEqual(today['status'], 'partial')
+        with sqlite3.connect(self.statistics_db) as locked:
+            locked.execute('BEGIN EXCLUSIVE')
+            status, body = self.request('/api/v1/telephony')
+            self.assertEqual(status, 200)
+            self.assertIn('extensions', body)
+            self.assertIsNone(body['call_statistics']['today']['incoming_calls'])
+            self.assertEqual(body['call_statistics']['today']['reason_code'], 'storage_unavailable')
+            self.assertNotIn(str(self.statistics_db), json.dumps(body))
+            locked.rollback()
+        self.ami.send(event)  # Recovery must not count the existing ingress again.
+        today = wait_for(captured)
+        self.assertEqual(today['incoming_calls'], 1)
+        self.assertEqual(today['reason_code'], 'capture_gap')
+        self.assertEqual(self.request('/api/v1/telephony', headers={'Origin': 'https://evil.example'})[0], 403)
+
+    def test_14_statistics_survive_process_restart_and_replay(self):
+        event = dict(Event='UserEvent', UserEvent='KienzlefonCallEntered', SchemaVersion='1',
+                     PbxId='practice-test', CallId=str(uuid.uuid4()), EnteredAt=str(int(time.time())))
+        before = self.request('/api/v1/telephony')[1]['call_statistics']['today']['incoming_calls']
+        self.ami.send(event)
+        wait_for(lambda: self.request('/api/v1/telephony')[1]['call_statistics']['today']['incoming_calls'] == before + 1)
+        cls = type(self)
+        cls.process.kill()
+        cls.process.wait(timeout=5)
+        cls.process = subprocess.Popen(cls.launch, cwd=ROOT, stdout=cls.log, stderr=cls.log)
+        def ready():
+            try:
+                _, bootstrap = cls.request('/api/v1/bootstrap')
+                cls.token = bootstrap['token']
+                return not cls.request('/api/v1/telephony')[1]['stale']
+            except (OSError, urllib.error.URLError):
+                return False
+        wait_for(ready)
+        self.ami.send(event)
+        self.ami.send({**event, 'UserEvent': 'KienzlefonCallRoute', 'Route': 'prescription'})
+        def routed():
+            today = cls.request('/api/v1/telephony')[1]['call_statistics']['today']
+            routes = {r['id']: r['incoming_calls'] for r in today['routes'] or []}
+            return today if routes.get('prescription') == 1 else None
+        today = wait_for(routed)
+        self.assertEqual(today['incoming_calls'], before + 1)
+        self.assertEqual(today['status'], 'partial')
+        self.assertEqual(today['reason_code'], 'capture_gap')
 
     def test_12_numeric_client_ids_keep_workplace_mapping(self):
         status, bootstrap = self.request('/api/v1/bootstrap')
@@ -292,9 +356,9 @@ class MiddlewareIntegration(unittest.TestCase):
                 self.assertEqual(len(self.aps.requests), after_first)
 
     def test_02_version_is_available_without_patient_lookup(self):
-        self.assertEqual(self.request('/api/v1/bootstrap')[1]['version'], '1.4.3')
+        self.assertEqual(self.request('/api/v1/bootstrap')[1]['version'], '1.5.8')
         self.assertEqual(self.request('/api/v1/bootstrap')[1]['author'], 'Dr. Thomas Kienzle')
-        self.assertEqual(self.request('/healthz')[1]['version'], '1.4.3')
+        self.assertEqual(self.request('/healthz')[1]['version'], '1.5.8')
 
     def test_03_http_controls_and_read_only_link(self):
         self.assertEqual(self.request('/api/v1/lookup', {'number': '03055501111'}, {'Origin': 'https://foreign.example'})[0], 403)

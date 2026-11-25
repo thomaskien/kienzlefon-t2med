@@ -12,19 +12,42 @@ final class HttpApi
     public function __construct(private Runtime $runtime) { $this->token = bin2hex(random_bytes(32)); }
     public function __invoke(ServerRequestInterface $request): Response|PromiseInterface
     {
+        $path=$request->getUri()->getPath();
+        $controlPath=$path==='/api/v1/telephony/overview'||str_starts_with($path,'/api/v1/extension-routing');
+        $service=$request->hasHeader('Authorization');
         try {
             $http = $this->runtime->config['http'];
             $host = trim(strtolower($request->getUri()->getHost()), '[]');
-            if (!in_array($host, array_map(static fn($v) => trim(strtolower($v), '[]'), $http['allowed_hosts']), true)) return self::json(['error'=>'Unbekannter Hostname.'], 403);
+            if (!in_array($host, array_map(static fn($v) => trim(strtolower($v), '[]'), $http['allowed_hosts']), true)) {
+                if (!$service && !$controlPath) return self::json(['error'=>'Diese Middleware-Adresse ist nicht freigegeben. Die Adresse des Aufrufs in T2med mit http.allowed_hosts abgleichen.'], 403);
+                throw new ControlError('forbidden_origin');
+            }
             $address = $request->getServerParams()['REMOTE_ADDR'] ?? '';
-            if (!self::allowedAddress($address, $http['allowed_networks'])) return self::json(['error'=>'Zugriff nur aus dem konfigurierten Netzwerk.'], 403);
+            if (!self::allowedAddress($address, $http['allowed_networks'])) throw new ControlError('forbidden_network');
             $origin = $request->getHeaderLine('Origin');
             if ($origin !== '') {
                 $expected = $request->getUri()->getScheme() . '://' . $request->getUri()->getAuthority();
-                if ($origin !== $expected && $origin !== rtrim($http['public_url'], '/')) return self::json(['error'=>'Fremder Web-Ursprung.'], 403);
+                if ($origin !== $expected && $origin !== rtrim($http['public_url'], '/')) throw new ControlError('forbidden_origin');
             }
-            if (in_array($request->getHeaderLine('Sec-Fetch-Site'), ['cross-site'], true) && $request->getMethod() !== 'GET') return self::json(['error'=>'Fremder Web-Ursprung.'], 403);
+            if (in_array($request->getHeaderLine('Sec-Fetch-Site'), ['cross-site'], true) && $request->getMethod() !== 'GET') throw new ControlError('forbidden_origin');
             $method = $request->getMethod(); $path = $request->getUri()->getPath();
+            if (str_starts_with($path, '/api/v1/practice/')) {
+                $result = PracticeApp::handle($this->runtime, $request);
+                return \React\Promise\resolve($result)->then(self::json(...), self::practiceFailure(...));
+            }
+            $allowedClients=null;
+            if ($service) {
+                $app=$this->runtime->config['app_access'];
+                if (!$app['enabled']) throw new ControlError('unauthenticated');
+                try { $secret=TelephonyContract::secret($app['token_file']); } catch(\Throwable) { throw new ControlError('unauthenticated'); }
+                if (!hash_equals('Bearer '.$secret,$request->getHeaderLine('Authorization'))) throw new ControlError('unauthenticated');
+                if (!self::allowedAddress($address,$app['allowed_networks'])) throw new ControlError('forbidden_network');
+                // A scoped service credential never falls through into the legacy API.
+                if (!$controlPath) throw new ControlError('client_forbidden');
+                $allowedClients=$app['allowed_clients'];
+            }
+            if ($controlPath) return $this->control($request,$allowedClients,$service);
+
             if ($method === 'GET' && $path === '/api/v1/bootstrap') {
                 $clients = [];
                 foreach ($this->runtime->config['clients'] as $id => $client) $clients[] = ['id'=>(string)$id,'label'=>$client['label'],'extension'=>$client['extension']];
@@ -66,7 +89,76 @@ final class HttpApi
             if (!isset($assets[$path])) return self::json(['error'=>'Seite nicht gefunden.'], 404);
             [$file,$type] = $assets[$path];
             return new Response(200, self::headers() + ['Content-Type'=>$type], $method === 'HEAD' ? '' : file_get_contents(dirname(__DIR__) . '/public/' . $file));
-        } catch (\Throwable $e) { return self::failure($e); }
+        } catch (\Throwable $e) {
+            if ($controlPath || $service) return self::controlFailure($e);
+            if ($e instanceof ControlError) return self::json(['error'=>$e->getMessage()],$e->getCode());
+            return self::failure($e);
+        }
+    }
+    private function control(ServerRequestInterface $request,?array $clients,bool $service): Response|PromiseInterface
+    {
+        $business=false;
+        try {
+            $path=$request->getUri()->getPath();$method=$request->getMethod();
+            if ($path==='/api/v1/telephony/overview') {
+                if ($method!=='GET') throw new ControlError('method_not_allowed');
+                return self::json($this->runtime->overview($request->getHeaderLine('X-Kienzlefon-Display') === '1'));
+            }
+            if ($path === '/api/v1/extension-routing/workplaces') {
+                if (!$service) throw new ControlError('unauthenticated');
+                if ($method !== 'GET') throw new ControlError('method_not_allowed');
+                return $this->runtime->routingWorkplaces()->then(self::json(...), self::controlFailure(...));
+            }
+            $paired = $service && ($this->runtime->config['telephony_control']['routing_token_file'] ?? '') !== '';
+            if ($service && !$paired) {
+                $clients = array_values(array_filter($clients, fn($id) => isset($this->runtime->config['clients'][$id])));
+            }
+            if (preg_match('~^/api/v1/extension-routing/requests/([^/]+)$~D',$path,$m)) {
+                if ($method!=='GET') throw new ControlError('method_not_allowed');
+                $business=true;
+                if ($paired) {
+                    return $this->withWorkplace($request, null,
+                        fn($client, $pbx) => self::json($this->runtime->routingGet($m[1], [$client], $pbx)));
+                }
+                return self::json($this->runtime->routingGet($m[1],$clients));
+            }
+            if ($path!=='/api/v1/extension-routing') throw new ControlError('not_found');
+            if ($method!=='POST') throw new ControlError('method_not_allowed');
+            if (!$service && !hash_equals($this->token,$request->getHeaderLine('X-Kienzlefon-Token'))) throw new ControlError('csrf_failed');
+            if (strtolower(trim(explode(';',$request->getHeaderLine('Content-Type'))[0]))!=='application/json') throw new ControlError('json_required');
+            $body=(string)$request->getBody();if(strlen($body)>8192)throw new ControlError('payload_too_large');
+            try { $input=json_decode($body,true,16,JSON_THROW_ON_ERROR); } catch(\Throwable) { throw new ControlError('invalid_request'); }
+            if (!is_array($input)||array_is_list($input)) throw new ControlError('invalid_request');
+            $business=true;
+            $submit = fn($scope, $pbx) => $this->runtime->routingSubmit($input, $scope, $pbx)->then(static function($result){
+                $state=$result['request']['state'];
+                $status=$state==='applied'?200:(in_array($state,['accepted','applying','unknown'],true)?202:ControlError::statusFor($result['error']['code']));
+                return self::json($result,$status);
+            },static fn($e)=>self::controlFailure($e,true));
+            if ($paired) {
+                $command = TelephonyContract::command($input);
+                return $this->withWorkplace($request, $command['client_id'], fn($client, $pbx) => $submit([$client], $pbx));
+            }
+            return $submit($clients, null);
+        } catch(\Throwable $e) { return self::controlFailure($e,$business); }
+    }
+    /** Only called after authenticating the practice App server. It attests its server-side session. */
+    private function withWorkplace(ServerRequestInterface $request, ?string $commandClient, callable $run): PromiseInterface
+    {
+        $client = $request->getHeaderLine('X-Kienzlefon-Workplace');
+        $pbx = $request->getHeaderLine('X-Kienzlefon-Pbx-Id');
+        if ($pbx !== $this->runtime->config['telephony_control']['pbx_id'] || !TelephonyContract::valid('ClientId', $client)
+            || ($commandClient !== null && $client !== $commandClient)) throw new ControlError('client_forbidden');
+        return $this->runtime->routingWorkplaces()->then(static function ($scope) use ($client, $pbx, $run) {
+            if (!$scope['remote_enabled']) throw new ControlError('global_disabled');
+            if ($scope['mode'] === 'selected' && !in_array($client, $scope['client_ids'], true)) throw new ControlError('client_forbidden');
+            return $run($client, $pbx);
+        })->then(null, static fn($e) => self::controlFailure($e, true));
+    }
+    private static function controlFailure(\Throwable $e,bool $command=false): Response
+    {
+        if (!$e instanceof ControlError) $e=new ControlError($e instanceof \InvalidArgumentException?'invalid_request':'state_unavailable');
+        return self::json(($command?['request'=>null]:[])+['error'=>$e->payload()],$e->getCode());
     }
     public static function allowedAddress(string $address, array $networks): bool
     {
@@ -81,6 +173,11 @@ final class HttpApi
             if (!$remaining || ((ord($raw[$bytes]) ^ ord($ip[$bytes])) & (255 << (8 - $remaining))) === 0) return true;
         }
         return false;
+    }
+    private static function practiceFailure(\Throwable $e): Response
+    {
+        if ($e instanceof ControlError) return self::controlFailure($e);
+        return self::failure($e);
     }
     private static function failure(\Throwable $e): Response
     {

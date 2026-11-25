@@ -171,3 +171,12 @@ test('Wahlhilfe verwendet eindeutige FHIR-Namen und lässt sonst den Namen leer'
 test('Wahlhilfe ohne FHIR-Bestand überträgt keinen Ersatznamen', function () { directoryFixture(function ($d,$c) {
     $runtime=new Kienzlefon\Runtime($c); eq((new ReflectionMethod($runtime,'dialCallerId'))->invoke($runtime,'03055509999'),'"" <03055509999>');
 }); });
+
+test('FHIR-Geburtsdatum bleibt nach erneutem Öffnen für den ausgewählten Treffer erhalten', function () {
+    directoryFixture(function ($directory,$config) {
+        $patient = directoryPatient('test', 8200, ['0301234567']) + ['birth_date'=>'1980-02-29'];
+        $directory->replace([$patient], withBirthDates: true);
+        $again = new PatientDirectory($config['fhir'], '49');
+        eq($again->lookup('0301234567')['patients'][0]['birth_date'], '1980-02-29');
+    });
+});

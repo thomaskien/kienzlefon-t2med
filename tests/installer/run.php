@@ -59,6 +59,25 @@ check(str_contains($compatible['main'], '[documents]'), 'bestehende Freigabe ble
 check(str_contains($compatible['main'], "include = {$include}"), 'Include wird additiv gesetzt');
 check($compatible['managed'] === managedShare($root), 'verwaltete Freigabe ist deterministisch');
 
+$faxMain = "[global]\n    server role = auto\n    map to guest = Bad User\n"
+    . "[fax-eingang]\n    path = /srv/kienzlefax/fax-eingang\n[pdf-zu-fax]\n    path = /srv/kienzlefax/pdf-zu-fax\n";
+$auto = plan($faxMain, null, $faxMain, $root, $include, 'Bad User', 'auto', false, 'ROLE_STANDALONE');
+check($auto['main'] === str_replace('[fax-eingang]', "    include = {$include}\n[fax-eingang]", $faxMain),
+    'Auto-Standalone ergänzt genau das Include und erhält Rolle und Fax-Freigaben bytegleich');
+check($auto['managed'] === managedShare($root), 'Bestätigtes Auto-Standalone richtet die GDT-Freigabe ein');
+foreach (['', 'ROLE_DOMAIN_MEMBER', 'ROLE_ACTIVE_DIRECTORY_DC', 'widersprüchliche Rollenmeldungen'] as $report) {
+    throws(fn() => plan($faxMain, null, $faxMain, $root, $include, 'Bad User', 'auto', false, $report),
+        SambaConflict::class, "Auto ohne eindeutige Standalone-Bestätigung wird abgelehnt ({$report})");
+}
+throws(fn() => plan($faxMain, null, $faxMain, $root, $include, 'Never', 'auto', false, 'ROLE_STANDALONE'),
+    SambaConflict::class, 'Auch Auto-Standalone benötigt map to guest = Bad User');
+throws(fn() => plan($faxMain, null, $faxMain . "[kienzlefon-GDT]\n", $root, $include, 'Bad User', 'auto', false, 'ROLE_STANDALONE'),
+    SambaConflict::class, 'Auch Auto-Standalone lehnt eine fremde GDT-Freigabe ab');
+throws(fn() => plan($auto['main'], "[fremd]\n", $faxMain, $root, $include, 'Bad User', 'auto', false, 'ROLE_STANDALONE'),
+    SambaConflict::class, 'Auch Auto-Standalone lehnt ein kollidierendes Include ab');
+throws(fn() => plan($existingMain, null, $existingMain, $root, $include, 'Bad User', 'member server', false, 'ROLE_STANDALONE'),
+    SambaConflict::class, 'Eine explizite Domänenrolle wird durch die Rollenmeldung nicht freigegeben');
+
 $effectiveManaged = $compatible['main'] . "\n" . $compatible['managed'];
 $again = plan($compatible['main'], $compatible['managed'], $effectiveManaged, $root, $include, 'Bad User', 'standalone server', false);
 check($again['main'] === $compatible['main'] && $again['changed'] === false, 'Samba-Plan ist idempotent');
@@ -121,6 +140,26 @@ check(array_keys($validated['ami']) === array_keys($example['ami']), 'AMI-Schema
 $tomlExample = Config::load(dirname(__DIR__, 2) . '/config.example.toml');
 check($tomlExample === $validated, 'TOML- und Legacy-JSON-Beispiel sind wertgleich');
 
+$withStatistics = $validated;
+$withStatistics['call_statistics']['enabled'] = true;
+$withStatistics['call_statistics']['pbx_id'] = 'practice-test';
+$withStatistics['call_statistics']['database_path'] = '/var/lib/kienzlefon-t2med/team-statistics.sqlite';
+check(buildConfig(answers(), $withStatistics)['call_statistics'] === $withStatistics['call_statistics'], 'Neukonfiguration erhält Statistik und Dateipfad');
+$withControl=$withStatistics;
+$withControl['telephony_control']['enabled']=true;
+$withControl['telephony_control']['pbx_id']='practice-test';
+$withControl['telephony_control']['base_url']='http://127.0.0.1:8767';
+$withControl['app_access']['enabled']=true;
+$withControl['app_access']['allowed_clients']=['empfang-1'];
+check(buildConfig(answers(),$withControl)['telephony_control']===$withControl['telephony_control'], 'Reconfiguration retains enabled control endpoint and journal');
+check(buildConfig(answers(),$withControl)['app_access']===$withControl['app_access'], 'Reconfiguration retains restricted app clients and networks');
+$legacyControl=$withStatistics;unset($legacyControl['telephony_control'],$legacyControl['app_access']);
+check(validateConfig($legacyControl)['telephony_control']['enabled']===false, 'Old config never enables control automatically');
+$legacyStatistics = $validated;
+unset($legacyStatistics['call_statistics']);
+check(validateConfig($legacyStatistics)['call_statistics']['enabled'] === false, 'Installer akzeptiert alte Konfiguration ohne Statistik');
+check(buildConfig(answers(), $legacyStatistics)['call_statistics']['enabled'] === false, 'Upgrade aktiviert Erfassung nicht ohne Ereignisquelle');
+
 $special = $validated;
 $special['ami']['secret'] = 'Raute #, "Anführung", Backslash \\ und Umlaut ä';
 $special['aps']['password'] = '';
@@ -132,6 +171,36 @@ mkdir($tempDirectory, 0700);
 $specialPath = $tempDirectory . '/config.toml';
 writeToml($specialPath, $special);
 check(Config::load($specialPath) === Config::validate($special), 'JSON -> TOML -> Config erhält Sonderzeichen, leere Arrays und Schlüssel verlustfrei');
+
+// Both the reported browser authority and the FHIR destination come from independent interfaces.
+$directoryConfig = Config::load(dirname(__DIR__, 2) . '/config.example.toml');
+$directoryConfig['fhir']['base_url'] = 'https://10.0.83.120:16567/aps/fhir/api/r4';
+$directoryPath = $tempDirectory . '/directory.toml';
+writeToml($directoryPath, $directoryConfig);
+$interfaces = [['up'=>true, 'unicast'=>[
+    ['address'=>'10.0.83.85','netmask'=>'255.255.255.0'],
+    ['address'=>'172.17.0.1','netmask'=>'255.255.0.0'],
+]]];
+$uri = 'http://10.0.83.85:8766/telefonverzeichnis-aktualisieren.php';
+$request = new React\Http\Message\ServerRequest('GET', $uri, [], '', '1.1', ['REMOTE_ADDR'=>'10.0.83.27']);
+$directoryApi = fn() => new Kienzlefon\HttpApi(new Kienzlefon\Runtime(Config::load($directoryPath), true));
+check($directoryApi()($request)->getStatusCode() === 403, 'Alte localhost-Konfiguration reproduziert HTTP 403 beim FHIR-Start');
+Kienzlefon\Installer\prepareDirectoryHost($directoryPath, $interfaces);
+$expected = $directoryConfig;
+$expected['http']['allowed_hosts'][] = '10.0.83.85';
+check(Config::load($directoryPath) == $expected, 'Freigabe ergänzt nur die lokale Adresse im FHIR-Netz');
+check($directoryApi()($request)->getStatusCode() === 200, 'FHIR-Startseite vom Praxisarbeitsplatz abrufbar');
+check($directoryApi()($request->withHeader('Origin', 'https://other.example'))->getStatusCode() === 403, 'Fremder Browser-Ursprung bleibt gesperrt');
+$outside = new React\Http\Message\ServerRequest('GET', $uri, [], '', '1.1', ['REMOTE_ADDR'=>'192.0.2.27']);
+check($directoryApi()($outside)->getStatusCode() === 403, 'Fremdes Quellnetz bleibt gesperrt');
+$first = file_get_contents($directoryPath);
+Kienzlefon\Installer\prepareDirectoryHost($directoryPath, $interfaces);
+check($first === file_get_contents($directoryPath), 'Zweiter Lauf behält Hostregeln bytegleich');
+$directoryConfig['http']['allowed_hosts'] = ['localhost'];
+writeToml($directoryPath, $directoryConfig);
+Kienzlefon\Installer\prepareDirectoryHost($directoryPath, $interfaces);
+check(Config::load($directoryPath) == $directoryConfig, 'Individuelle Hostbeschränkung bleibt erhalten');
+unlink($directoryPath);
 
 foreach ([['201'], ['0'], ['0', '1'], ['201', '001', '1', '0', 'pc-201']] as $ids) {
     $numeric = answers();

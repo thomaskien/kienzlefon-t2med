@@ -443,3 +443,14 @@ func pipeDialContext(ctx context.Context, _, address string) (net.Conn, error) {
 		return nil, ctx.Err()
 	}
 }
+
+func TestOptionalFullBirthDate(t *testing.T) {
+	for _, c := range []struct{ input, want string }{
+		{"1980-02-29", "1980-02-29"}, {"2001-02-29", ""}, {"1970", ""}, {"", ""},
+	} {
+		p, err := parsePatient([]byte(`{"id":"test","birthDate":"` + c.input + `"}`))
+		if err != nil || p.BirthDate != c.want {
+			t.Fatalf("birthDate %q: got %q, error %v", c.input, p.BirthDate, err)
+		}
+	}
+}

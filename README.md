@@ -4,9 +4,15 @@
 
 Anrufer erkennen, Gespräche und Warteschlangen überblicken, direkt wählen und die passende T2med-Akte öffnen: kienzlefon-t2med verbindet Asterisk mit T2med über eine zentrale Middleware.
 
-**Version 1.4.3 · von Dr. Thomas Kienzle** · [MIT-Lizenz](LICENSE) · [Änderungen](CHANGELOG.md)
+**Version 1.5.8 · von Dr. Thomas Kienzle** · [MIT-Lizenz](LICENSE) · [Änderungen](CHANGELOG.md)
 
 [Installation](docs/INSTALLATION.md) · [FHIR und T2med-Aufruf](docs/FHIR.md) · [Bedienung und Weblinks](docs/WEB.md) · [Desktop-Clients](docs/CLIENTS.md) · [Asterisk](docs/AMI_DIALPLAN.md)
+
+[Anrufe heute und Wege-Statistik: Einrichtung und App-Schnittstelle](docs/ANRUFSTATISTIK.md)
+
+[Normal/ROT und Live-Zahlen einrichten](docs/TELEFONIE-STEUERUNG.md) – Middleware umgesetzt; Anlagen-Control-Dienst und App separat bereitstellen.
+
+[Gemeinsamer Telefonievertrag v1](docs/telefonie-v1/README.md) – Umsetzungsgrundlage für Kienzlefon, Middleware und App.
 
 > **Hinweis zum T2med-Demo-Key:** Der mitgelieferte API-Key erlaubt nur **100 Requests**. Ein FHIR-Abgleich kann mehrere Requests benötigen; die lokale Patientensuche benötigt keine weiteren. [FHIR einrichten](docs/FHIR.md)
 >
@@ -26,7 +32,7 @@ Der Pfeil **↪** am eigenen verbundenen Gespräch öffnet die Vermittlung zu ei
 
 ![Vermittlungsdialog](docs/images/vermittlung.jpg)
 
-*Die Screenshots zeigen einen älteren Oberflächenstand. Bedienung und Statusangaben in der Dokumentation gelten für 1.4.3.*
+*Die Screenshots zeigen einen älteren Oberflächenstand. Bedienung und Statusangaben in der Dokumentation gelten für 1.5.1.*
 
 ## Aufbau
 
@@ -51,10 +57,12 @@ FHIR ist die Standardquelle. APS bleibt nur als ausdrücklich aktivierter Altbet
    ```
 
 3. In T2med den Aufruf **Telefonverzeichnis aktualisieren** gemäß [FHIR-Anleitung](docs/FHIR.md) anlegen und einmal ausführen.
-4. Pro Arbeitsplatz Client-ID, Nebenstelle und GDT-Unterverzeichnis zuordnen. Die [GDT-Vorlage „Telefonaufruf“ herunterladen](https://raw.githubusercontent.com/thomaskien/kienzlefon-t2med/main/docs/templates/GDTGeraet_Telefonaufruf_Konfiguration.json) und nach der [Importanleitung](docs/INSTALLATION.md#gdt-vorlage-in-t2med-importieren) einrichten.
+4. Im nummerierten Menü die gewünschten Nebenstellen aktivieren. Für jeden neuen Platz verwendet der Installer die Nebenstellennummer für den Arbeitsplatz, den Telepraxis-Bearbeiter und das GDT-Unterverzeichnis. Den angezeigten Telepraxis-Startpfad am jeweiligen Platz als Lesezeichen speichern. Für den Aktenaufruf in T2med die GDT-Vorlage importieren. [Vorlage herunterladen](https://raw.githubusercontent.com/thomaskien/kienzlefon-t2med/main/docs/templates/GDTGeraet_Telefonaufruf_Konfiguration.json) · [Importanleitung](docs/INSTALLATION.md#gdt-vorlage-in-t2med-importieren)
 5. Webansicht unter `http://<Middleware-Server>:8766/` öffnen (Standardport **8766**), Arbeitsplatz wählen und Patientensuche, Aktenaufruf und Telefonie praktisch prüfen.
 
 Details zu Installation, Updates, Samba und Diagnose stehen in [Installation und Betrieb](docs/INSTALLATION.md). Die Bedienung einschließlich Rückrufaufträgen, Vermittlung und Weblinks beschreibt [Oberfläche und Weblinks](docs/WEB.md).
+
+Als optionale dritte Komponente des Kombi-Installers lässt sich die Middleware aus einem lokalen Paket auf dem Fon-Server oder einem separaten Linux-Rechner installieren. [Paket bauen und AMI-Übergabe verwenden](docs/INSTALLATION.md#optionale-dritte-komponente-des-kombi-installers)
 
 ## Aktualisieren und Demo
 

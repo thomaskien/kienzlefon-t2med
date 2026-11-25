@@ -54,6 +54,7 @@ type patient struct {
 	PatientNumber *int64   `json:"patient_number"`
 	FirstName     string   `json:"first_name"`
 	LastName      string   `json:"last_name"`
+	BirthDate     string   `json:"birth_date,omitempty"`
 	Phones        []string `json:"phones"`
 }
 
@@ -508,11 +509,15 @@ func parsePatient(raw json.RawMessage) (patient, error) {
 		Identifier json.RawMessage `json:"identifier"`
 		Name       json.RawMessage `json:"name"`
 		Telecom    json.RawMessage `json:"telecom"`
+		BirthDate  string          `json:"birthDate"`
 	}
 	if err := json.Unmarshal(raw, &resource); err != nil || !patientIDPattern.MatchString(resource.ID) {
 		return patient{}, errors.New("invalid patient")
 	}
 	p := patient{ID: resource.ID, Phones: make([]string, 0)}
+	if _, err := time.Parse("2006-01-02", resource.BirthDate); err == nil {
+		p.BirthDate = resource.BirthDate
+	}
 	var err error
 	p.PatientNumber, err = parsePatientNumber(rawPointer(resource.Identifier))
 	if err != nil {
